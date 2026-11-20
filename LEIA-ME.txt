@@ -1,0 +1,44 @@
+﻿PULSO
+Jogo de ritmo para teclado • Windows
+
+Abrir
+Windows portátil. Extraia o ZIP inteiro e dê dois cliques em Pulso.exe. O jogo abre em sua própria janela, por usuário, sem instalador ou elevação. Mantenha app e runtime junto ao exe. As três faixas originais estão prontas para jogar offline. Ao fechar a janela, a sala hospedada pelo app também fecha.
+Versão de navegador. Dê dois cliques em “Iniciar Pulso.cmd” e mantenha o servidor aberto. O navegador abre em http://localhost:8765.
+
+Player
+O Pulso abre no Player. Escolha uma faixa da biblioteca, monte a fila e use os controles de volume, reprodução aleatória e repetição. A música continua pelas abas e pausa quando a partida começa. Use “Jogar esta música” na faixa selecionada para abrir a partida. O olhinho remove uma faixa do Player e da fila. Use “Ocultas” para voltar a exibi-la. A lixeira exclui o áudio e o mapa das faixas importadas, incluindo as cópias correspondentes na pasta Músicas do Pulso.
+
+Sua pasta Músicas
+Na biblioteca, clique em “Pasta de músicas” para abrir %LOCALAPPDATA%\Pulso\Músicas. Coloque arquivos de áudio diretamente ali. Quando terminar de copiar, a fila de análise começa automaticamente. O botão “Atualizar músicas” verifica a pasta e tenta de novo os arquivos que deram erro. A faixa aparece na biblioteca depois que o mapa fica pronto. O limite por áudio é 256 MB.
+O Pulso guarda nessa pasta os novos downloads do YouTube em WAV e uma cópia dos arquivos importados pelo seletor. Os mapas, a biblioteca e o progresso da campanha ficam em %LOCALAPPDATA%\Pulso. A versão portátil usa os dados da versão de navegador que você já tinha nesse computador.
+
+Importar por link
+Em “Adicionar música”, cole o endereço do vídeo ou abra uma playlist. Marque cada faixa ou use “Selecionar playlist inteira”. Revise a seleção antes de clicar em “Baixar”. Na fila de importação, use “Cancelar” na faixa que deseja parar. A fila continua de onde parou ao reabrir o jogo. O atalho “Playlist Musicas” abre a playlist do YouTube do projeto. Downloads precisam de internet. As músicas ficam disponíveis offline após salvar e analisar. Os WAVs ocupam mais espaço no PC. Durante a partida, o Pulso usa uma cópia FLAC sem perdas para carregar as novas faixas do YouTube.
+
+Converter áudio
+Em Conversor, escolha um arquivo do PC ou uma faixa da biblioteca. Selecione WAV, M4A, MP3, FLAC, OGG ou Opus e clique em Converter e salvar. A cópia vai para Músicas > Convertidas. O Pulso aceita também formatos de entrada como AAC, AIFF, ALAC e WMA.
+
+Jogar
+No Player, clique em “Jogar esta música” e escolha o modo e a dificuldade. No Normal, a faixa reinicia ao zerar a vida. No Treino, você pode chegar ao final mesmo com a vida zerada.
+Fácil       A S J
+Médio       A S J K
+Difícil     A S J K L
+
+Acerte o centro da bolinha quando ele chegar ao círculo da mesma pista. Se a bolinha tiver cauda, segure até a ponta chegar ao círculo. Soltar cedo interrompe a sequência. Completar a sustentação dá bônus. O fácil acompanha principalmente o pulso audível; médio e difícil acrescentam subdivisões e detalhes de melodia. O jogo usa o relógio de áudio do navegador para sincronizar a pista.
+Acertos explodem na pista. Uma nota perdida marca o alvo em vermelho e tira vida. No solo, três acertos seguidos recuperam até 6 pontos de vida. O botão de tela cheia ao lado de Sair alterna tela cheia. Use P ou o botão de pausa para pausar o solo. Nas configurações é possível ajustar volume e teclas. Se P for usado em uma pista personalizada, use o botão para pausar.
+A contagem de três segundos termina antes de as notas aparecerem. A linha roxa dos círculos mostra sua energia e enche com os acertos. A partir de 20%, mantenha Espaço pressionado para dobrar os pontos no solo ou o dano no cooperativo. O brilho percorre a linha e se dissipa abaixo. A energia diminui durante o uso. Solte para guardar o restante.
+
+Cooperativo
+Reúna de 2 a 7 jogadores na mesma rede. O anfitrião abre Cooperativo, escolhe a faixa, cria a sala e copia o convite. Cada convidado pode colar o link em Cooperativo → Convite ou código dentro do app, ou abrir no navegador. Cada jogador escolhe sua dificuldade e clica em “Estou pronto”. Quando todos estiverem prontos, o anfitrião clica em “Iniciar partida”.
+Acertos causam dano e erros tiram vida. O painel mostra a vida, pontuação e efeitos de cada jogador junto da vida e do escudo do chefe. A cruz verde recupera até 20 de vida para você e 8 para o aliado com menos vida. O raio amarelo causa dano triplo. Os chevrons violetas dobram o dano por seis segundos. O losango azul dá dano extra quando dois jogadores acertam juntos. A zero de vida, seu dano cai pela metade até receber uma cura. Derrotar o chefe libera o próximo nível.
+
+Se o convite não abrir, confira se ambos estão na mesma rede e se o anfitrião está com o Pulso aberto. Para receber conexões, o Windows precisa permitir o tráfego da rede privada na porta 8765. O app ativa a escuta de rede ao criar a primeira sala e usa somente as permissões já concedidas à sua conta.
+
+Requisitos
+O pacote portátil é para Windows 10 ou 11 x64 com Microsoft Edge WebView2 Runtime. O pacote contém Python, FFmpeg, yt-dlp, Deno e o modelo de análise. O navegador via Iniciar Pulso.cmd usa um Python de 64 bits instalado e as ferramentas no PATH ou no runtime do Frame Scale.
+
+Tecnologia e créditos
+Basic Pitch, do Spotify, estima os ataques e alturas de notas. O Pulso combina essas estimativas com a percussão para gerar mapas com 3, 4 e 5 pistas. Os padrões são aproximações jogáveis e variam conforme o arranjo e a qualidade da gravação.
+Modelo Basic Pitch e avisos incluídos em models/basic-pitch (Apache 2.0).
+Fonte Barlow distribuída sob SIL Open Font License, em web/fonts/OFL.txt.
+Órbita, Vidro Azul e Maré Baixa são composições instrumentais originais preparadas para o jogo.

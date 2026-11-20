@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#151615" />
+    <title>Pulso • Jogo de ritmo</title>
+    <link rel="icon" href="/icon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/rail.css" />
+    <link rel="stylesheet" href="/player.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="bar-inner">
+        <button class="wordmark" data-go="player" aria-label="Pulso, início">
+          <span class="brand-glyph" aria-hidden="true"
+            ><i></i><i></i><i></i><i></i></span
+          >Pulso<span class="logo-stop">.</span>
+        </button>
+        <nav aria-label="Principal">
+          <button id="nav-player" data-go="player" hidden>
+            <i data-icon="music"></i>Player
+          </button>
+          <button id="nav-library" data-go="library">
+            <i data-icon="library"></i>Biblioteca</button
+          ><button id="nav-coop" data-go="coop">
+            <i data-icon="users"></i>Cooperativo
+          </button>
+          <button id="nav-converter" data-go="converter" hidden>
+            <i data-icon="refresh"></i>Conversor
+          </button>
+        </nav>
+        <div class="bar-tools">
+          <button id="desktop-home" class="btn quiet" hidden>Meu Pulso</button>
+          <span id="connection" class="online"><i></i>Servidor local</span
+          ><button
+            class="icon-btn"
+            id="settings"
+            aria-label="Configurações"
+            title="Configurações"
+          >
+            <i data-icon="sliders"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main id="view"></main>
+    <section
+      id="player-dock"
+      aria-label="Controles de reprodução"
+      hidden
+    ></section>
+    <dialog id="modal"><div id="modal-content"></div></dialog>
+    <div id="toast" role="status"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

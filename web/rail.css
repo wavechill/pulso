@@ -1,0 +1,172 @@
+/* The two layers keep the fretboard and key labels out of the animation loop. */
+.note-stage {
+  width: min(100%, 510px);
+  height: clamp(280px, 53dvh, 505px);
+  margin-inline: auto;
+  isolation: isolate;
+  contain: layout paint;
+  background: #1a1c19;
+  border-color: #373a33;
+}
+.note-stage canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.note-stage .rail-base {
+  pointer-events: none;
+}
+.note-stage #note-layer {
+  touch-action: none;
+}
+#round-countdown {
+  position: absolute;
+  inset: 45% auto auto 50%;
+  width: clamp(66px, 18%, 92px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 1px solid #a27560;
+  border-radius: 50%;
+  background: #211f1a;
+  color: #ffbfaa;
+  font-size: clamp(31px, 7vw, 43px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* The light stays on the judgment line and its wake fades below it. */
+.rail-power {
+  position: absolute;
+  pointer-events: none;
+}
+.rail-power-level {
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #a970f9, #dcafff);
+  box-shadow: 0 1px 5px #b47affbd;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 95ms ease-out;
+}
+.rail-power.active .rail-power-level {
+  background: linear-gradient(90deg, #bd89ff, #f2ddff);
+  transition: transform 48ms linear;
+}
+.rail-power::after,
+.rail-power-wake {
+  position: absolute;
+  inset-inline: 0;
+  opacity: 0;
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+}
+.rail-power::after {
+  content: "";
+  top: -1px;
+  height: 8px;
+  background: linear-gradient(
+    #d8a9ff60,
+    #f3e4ff 1px 2px,
+    #c087ffa6 3px,
+    #9150f300
+  );
+}
+.rail-power.active::after {
+  animation: rail-power-flash 170ms ease-out;
+}
+@keyframes rail-power-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.rail-power-wake {
+  top: 2px;
+  height: 24px;
+  transform-origin: center top;
+  background: linear-gradient(
+    #ac75f22b,
+    #b984f55e 66%,
+    #d4a4faa6 88%,
+    #e8d2ffd9 94%,
+    #d4a4fa00
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-power .rail-power-level {
+    transition: none;
+  }
+  .rail-power.active::after {
+    animation: none;
+  }
+}
+.game-layout:not(.cooperative) {
+  width: min(100%, 580px);
+}
+.play-area {
+  min-width: 0;
+}
+.play-area > .scorebar {
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+.game-position {
+  margin-top: 7px;
+}
+@media (max-height: 620px) {
+  .note-stage {
+    height: clamp(220px, 44dvh, 295px);
+  }
+}
+@media (max-width: 520px) {
+  .note-stage {
+    width: 100%;
+    height: clamp(245px, 43dvh, 390px);
+  }
+}
+
+.game-heading .actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.game-layout:is(:fullscreen, .native-fullscreen) {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: clamp(8px, 2.5vh, 28px) max(14px, calc((100vw - 780px) / 2));
+  display: block;
+}
+.game-layout:is(:fullscreen, .native-fullscreen) .note-stage {
+  height: clamp(230px, 65dvh, 790px);
+  width: min(100%, 650px);
+}
+@media (max-width: 700px) {
+  .cooperative:is(:fullscreen, .native-fullscreen) .note-stage {
+    height: 40dvh;
+  }
+}
+
+.play-guide {
+  margin: -7px 0 16px;
+}
+.native-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+}

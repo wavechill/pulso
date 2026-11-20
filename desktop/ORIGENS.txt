@@ -1,0 +1,22 @@
+Componentes do Pulso Windows
+
+Python embutido 3.14.7, distribuição oficial PSF para Windows x64.
+https://www.python.org/downloads/release/python-3147/
+A licença acompanha runtime/python/LICENSE.txt. As licenças e metadados das bibliotecas Python acompanham runtime/python/packages.
+
+FFmpeg e ffprobe, distribuição LGPL compartilhada para Windows x64, sem modificações.
+https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-11-20-12-40
+Código da versão 660b5aa7db:
+https://github.com/FFmpeg/FFmpeg/archive/660b5aa7db.tar.gz
+Receita de compilação e fontes das dependências:
+https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/autobuild-2026-11-20-12-40
+A saída de runtime/media/ffmpeg.exe -buildconf identifica as opções do binário.
+
+O Pulso usa o Deno v2.9.7 e o yt-dlp v2026.10.26 para importação de links.
+https://github.com/denoland/deno/releases/tag/v2.9.7
+https://github.com/yt-dlp/yt-dlp/tree/2026.10.26
+
+WebView2 SDK 1.0.4258.31. A janela usa o runtime Evergreen do computador.
+https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
+
+Modelo Basic Pitch do Spotify e fonte Barlow. Licenças em app/models/basic-pitch e app/web/fonts.

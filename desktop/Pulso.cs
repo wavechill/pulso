@@ -21,8 +21,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Pulso")]
 [assembly: AssemblyProduct("Pulso")]
 [assembly: AssemblyDescription("Jogo de ritmo para Windows")]
-[assembly: AssemblyVersion("1.11.1.0")]
-[assembly: AssemblyFileVersion("1.11.1.0")]
+[assembly: AssemblyVersion("1.12.0.0")]
+[assembly: AssemblyFileVersion("1.12.0.0")]
 
 internal static class Program
 {

@@ -63,6 +63,7 @@ export const esc = (v) =>
 export const clock = (t) =>
   Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0");
 export const diffnames = { easy: "Fácil", medium: "Médio", hard: "Difícil" };
+export const fretColors = ["#48ff19", "#ff2344", "#ffdf00", "#008fff", "#ff8012"];
 export const audioFileAccept =
   "audio/*,video/mp4,.alac,.ape,.caf,.m4b,.mka,.wave,.wma,.opus,.aif,.aiff,.webm";
 export const lanes = {
@@ -97,6 +98,7 @@ export function prefs() {
     difficulty: "medium",
     volume: 0.8,
     effectsVolume: 0.38,
+    thunderMode: "streak",
     gameBackdrop: "art",
     soloMode: "normal",
     name: "",
@@ -107,6 +109,7 @@ export function prefs() {
           "difficulty",
           "volume",
           "effectsVolume",
+          "thunderMode",
           "gameBackdrop",
           "name",
           "playerVolume",

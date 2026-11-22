@@ -10,6 +10,7 @@ import {
   clock,
   icon,
   lanes,
+  fretColors,
   diffnames,
   prefs,
   save,
@@ -79,11 +80,10 @@ export function startGame({
   onExit,
 }) {
   const options = prefs(),
-    keys = lanes[diff].map((i) => options.keys[i]),
-    colors = ["#ff4d37", "#69ed42", "#ffd02d", "#23caff", "#bc65ff"];
+    keys = lanes[diff].map((i) => options.keys[i]);
   const originalNotes = track.map.charts[diff],
     flags = new Uint8Array(originalNotes.length),
-    laneColors = lanes[diff].map((i) => colors[i]);
+    laneColors = lanes[diff].map((i) => fretColors[i]);
   let notes = originalNotes, buffer = track.buffer, duration = buffer.duration;
   let tempo = 1, firstRound = null, sectionStart = 0, sectionIndex = 0, sought = false;
   const lead = NOTE_LEAD[diff],
@@ -124,7 +124,7 @@ export function startGame({
     '"><div class="song-scenery" aria-hidden="true"></div><div class="split game-heading"><div><p class="eyebrow">' +
     (room ? "Cooperativo" : practice ? "Solo · Treino" : "Solo") +
     " · " +
-    esc(track.map.difficultyLabel || diffnames[diff]) +
+    esc(track.map.difficultyLabels?.[diff] || track.map.difficultyLabel || diffnames[diff]) +
     (!room && offerEncore ? ' <span id="solo-round">· Rodada 1</span>' : "") +
     "</p><h2>" +
     esc(s.title) +
@@ -188,7 +188,7 @@ export function startGame({
     judgment.hidden = true;
     streak.textContent = "";
   }
-  function applaud(delta, late, lane) {
+  function applaud(delta, late, lane, noteTime) {
     const precise = delta <= PERFECT_WINDOW, close = delta <= .105;
     judgment.dataset.grade = precise ? "perfect" : close ? "good" : "near";
     judgment.textContent = precise ? "Perfeito!" : close ? "Muito bem!" : late ? "Um pouco tarde" : "Um pouco cedo";
@@ -202,12 +202,14 @@ export function startGame({
         { duration: 110, easing: "ease-out" },
       );
     }
-    if (COMBO_MILESTONES.has(combo) || (combo >= 100 && combo % 50 === 0)) {
-      sounds.play("combo");
+    const milestone = COMBO_MILESTONES.has(combo) || (combo >= 100 && combo % 50 === 0);
+    if (!milestone && options.thunderMode === "note") sounds.play("strike",noteTime);
+    if (milestone) {
+      sounds.play("combo",noteTime);
       clearTimeout(streakTimer);
       streak.textContent = combo + " em sequência!";
       if (!reducedMotion) {
-        rail.streak();
+        rail.streak(lane);
         streakShake?.cancel();
         streakShake = rail.canvas.parentElement.animate([
           { transform: "translate(0, 0)" }, { transform: "translate(-4px, 3px)" },
@@ -494,7 +496,7 @@ export function startGame({
     best = Math.max(best, combo);
     const precise = min <= PERFECT_WINDOW;
     if (precise) perfect++;
-    applaud(min, t > n.t, lane);
+    applaud(min, t > n.t, lane, n.t);
     score +=
       (!room && powered ? 2 : 1) *
       (precise ? 100 : 70) *

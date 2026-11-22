@@ -10,7 +10,7 @@ import tempfile
 import numpy as np
 
 DIRECTORY = Path(__file__).with_name("arrangements")
-CATALOG_REVISION = 1
+CATALOG_REVISION = 2
 SIGNATURE_RATE = 8000
 SIGNATURE_HOP = 80
 
@@ -21,7 +21,7 @@ def catalog():
 
 
 def candidates(duration):
-    return [item for item in catalog() if abs(item["duration"] - duration) < 1.35]
+    return [item for item in catalog() if abs(item["duration"] - duration) < (10 if item.get("external") else 1.35)]
 
 
 def signature(pcm):
@@ -41,6 +41,15 @@ def identify(path, duration):
     from analysis_engine import _decode
     pcm = _decode(path, SIGNATURE_RATE)
     for item in items:
+        if item.get("external"):
+            from guitar_edition import match_clock
+            clock = match_clock(item["signature"],pcm)
+            if clock is not None:
+                rate,offset=clock
+                first,last=item["playableRange"]
+                if 0<=rate*first+offset and rate*last+offset<=duration+.002:
+                    return item,clock
+            continue
         shifts = []
         for mark in item["signature"]:
             ref = np.asarray(mark["values"], dtype=float)/12
@@ -65,6 +74,9 @@ def identify(path, duration):
 def reviewed_chart(match, duration):
     from analysis_engine import VERSION
     item, shift = match
+    if item.get("external"):
+        from guitar_edition import authored_map
+        return authored_map(item,shift,duration)
     chart = deepcopy(item["map"])
     chart["analysisVersion"] = VERSION
     chart["duration"] = round(duration, 4)
@@ -76,8 +88,17 @@ def reviewed_chart(match, duration):
     for s in sections:
         s["start"] = round(max(0,s["start"]+shift),4)
         s["end"] = round(min(duration,s["end"]+shift),4)
-    chart["performance"] = {"id":item["id"],"revision":CATALOG_REVISION,"sections":sections}
+    chart["performance"] = {"id":item["id"],"revision":1,"sections":sections}
     return chart
+
+
+def pending_match(chart):
+    reference=chart.get("guitarReference")
+    if reference:
+        for item in catalog():
+            if item.get("external") and item["id"]==reference["id"]:
+                return item, reference["clock"]
+    return None
 
 
 def _playable_windows(notes, sections):

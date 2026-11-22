@@ -5,6 +5,7 @@ import {
   icon,
   diffnames,
   lanes,
+  fretColors,
   wait,
   api,
   post,
@@ -432,7 +433,7 @@ function wireDiff(root) {
       icon("keyboard") +
       " &nbsp;" +
       lanes[active]
-        .map((i) => "<kbd>" + esc(prefs().keys[i]) + "</kbd>")
+        .map((i) => '<kbd style="border-bottom-color:'+fretColors[i]+'">' + esc(prefs().keys[i]) + "</kbd>")
         .join("");
   }
   keys();
@@ -463,6 +464,7 @@ function chooseSolo(s, returnTo = screen === "player" ? "player" : "library", op
       `<label><input type="radio" name="solo-mode" value="normal" ${mode === "normal" ? "checked" : ""}><span><strong>Normal</strong><small>Reinicia ao zerar a vida</small></span></label>` +
       `<label><input type="radio" name="solo-mode" value="practice" ${mode === "practice" ? "checked" : ""}><span><strong>Treino</strong><small>Toque até o fim</small></span></label>` +
       '</fieldset><div id="automatic-difficulty"><strong>Dificuldade</strong>' +
+      (chop ? '<p class="small">Nas gravações compatíveis, você toca a guitarra de Wagsii. Difícil usa a pista Expert do Clone Hero.</p>' : '') +
       diffs(openPractice && chop ? "hard" : prefs().difficulty) + '</div>' +
       '<div class="practice-options" id="practice-options">' +
       (s.kind === "demo" ? '' : '<label><input type="checkbox" id="isolated-audio"> Ouvir só a parte indicada no trilho</label>') +
@@ -680,7 +682,7 @@ function settings() {
       Math.round(p.volume * 100) +
       '"></label><label class="field"><span class="settings-label">Efeitos da partida <output id="fx-vol-out"></output></span><input id="fx-vol" type="range" min="0" max="100" value="' +
       Math.round(p.effectsVolume * 100) +
-      '"></label><label class="field">Fundo da partida<select id="game-backdrop"><option value="art">Capa da música</option><option value="black">Preto</option></select></label><div class="divline"></div><strong>Teclas das pistas</strong><p class="small">Selecione uma tecla e pressione a nova letra.</p><div class="keyset">' +
+      '"></label><label class="field">Som do raio<select id="thunder-mode"><option value="streak">Ao completar sequências</option><option value="note">A cada acerto</option></select></label><label class="field">Fundo da partida<select id="game-backdrop"><option value="art">Capa da música</option><option value="black">Preto</option></select></label><div class="divline"></div><strong>Teclas das pistas</strong><p class="small">Selecione uma tecla e pressione a nova letra.</p><div class="keyset">' +
       p.keys
         .map(
           (v, i) =>
@@ -696,6 +698,7 @@ function settings() {
   );
   let key = -1;
   $("#game-backdrop").value = p.gameBackdrop;
+  $("#thunder-mode").value = p.thunderMode;
   const reflect = () => {
     $("#vol-out").value = $("#vol").value + "%";
     $("#fx-vol-out").value = $("#fx-vol").value + "%";
@@ -729,6 +732,7 @@ function settings() {
       keys: p.keys,
       volume: +$("#vol").value / 100,
       effectsVolume: +$("#fx-vol").value / 100,
+      thunderMode: $("#thunder-mode").value,
       gameBackdrop: $("#game-backdrop").value,
     });
     dlg.close();

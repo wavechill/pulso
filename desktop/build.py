@@ -139,7 +139,7 @@ def build(output, work):
     bundle_webview(output / "runtime", downloads)
     for name in ("web", "demo", "models", "arrangements"):
         shutil.copytree(ROOT / name, app / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ("server.py", "importer.py", "music_folder.py", "analysis_engine.py", "instrumental.py", "performances.py", "reductions.py", "song_phrases.py", "vocal_pitch.py", "audio_formats.py"):
+    for name in ("server.py", "importer.py", "music_folder.py", "analysis_engine.py", "instrumental.py", "instrument_focus.py", "guitar_edition.py", "performances.py", "reductions.py", "song_phrases.py", "vocal_pitch.py", "audio_formats.py"):
         shutil.copy2(ROOT / name, app / name)
     shutil.copy2(ROOT / "LEIA-ME.txt", output)
     shutil.copy2(ROOT / "desktop" / "ORIGENS.txt", notices)

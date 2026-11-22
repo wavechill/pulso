@@ -74,16 +74,33 @@ function gameSounds(context) {
   return bank;
 }
 
+function loadThunder(context, bank) {
+  if (bank.loading || bank.original) return;
+  bank.loading = true;
+  fetch("/api/efeitos/trovao")
+    .then(async response => {
+      if (!response.ok) return;
+      bank.combo = await context.decodeAudioData(await response.arrayBuffer());
+      bank.original = true;
+    }).catch(() => {}).finally(() => { bank.loading = false; });
+}
+
 export function mountGameSounds(context, volume) {
   const gain = context.createGain();
   gain.gain.value = Math.min(1, Math.max(0, volume));
   gain.connect(context.destination);
   const bank = gain.gain.value ? gameSounds(context) : null;
-  let lastMiss = -Infinity, variation = 0;
+  if (bank) loadThunder(context,bank);
+  let lastMiss = -Infinity, variation = 0, thunder, lastThunder = -Infinity, lastNote;
   return {
-    play(kind) {
+    play(kind, noteTime) {
       if (!bank) return;
-      let buffer = bank[kind];
+      const strike = kind === "strike" || kind === "combo";
+      let buffer = strike ? bank.combo : bank[kind];
+      if (strike && thunder && noteTime===lastNote && context.currentTime-lastThunder<.29) {
+        if (kind==="combo") thunder.level.gain.setTargetAtTime(1,context.currentTime,.008);
+        return;
+      }
       if (kind === "miss") {
         if (context.currentTime - lastMiss < MISS_COOLDOWN) return;
         lastMiss = context.currentTime;
@@ -92,11 +109,30 @@ export function mountGameSounds(context, volume) {
       }
       const source = context.createBufferSource();
       source.buffer = buffer;
+      if (strike) {
+        const t=context.currentTime;
+        // A chord lands once in the speakers, and rapid picks cannot stack long tails.
+        if (thunder) {
+          thunder.level.gain.cancelScheduledValues(t);
+          thunder.level.gain.setTargetAtTime(0,t,.012);
+          thunder.source.stop(t+.065);
+        }
+        const level=context.createGain();
+        level.gain.value=kind==="combo"?1:.53;
+        source.connect(level).connect(gain);
+        lastThunder=t;
+        lastNote=noteTime;
+        thunder={source,level};
+        source.onended=()=>{ source.disconnect();level.disconnect();if(thunder?.source===source)thunder=null; };
+        source.start();
+        return;
+      }
       source.connect(gain);
       source.onended = () => source.disconnect();
       source.start();
     },
     destroy() {
+      if (thunder) thunder.source.stop();
       gain.disconnect();
     },
   };

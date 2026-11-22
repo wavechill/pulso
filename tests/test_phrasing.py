@@ -33,7 +33,7 @@ class PhrasingTests(unittest.TestCase):
         self.assertEqual(refine(chart),second)
 
     def test_reviewed_recordings_share_one_clock_for_all_notes_beats_and_sections(self):
-        entries = catalog()
+        entries = [item for item in catalog() if not item.get("external")]
         self.assertEqual({item["id"] for item in entries}, {"training","waves","sunflower"})
         for item in entries:
             chart = reviewed_chart((item,.21),item["duration"]+.21)

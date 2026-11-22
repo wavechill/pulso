@@ -1,9 +1,9 @@
 import { createGpuNotes } from "./gpu-notes.js";
 const special = {
-  heal: { color: "#8dd6a2", label: "Cura" },
-  critical: { color: "#ffd16c", label: "Crítico" },
-  boost: { color: "#bda7ff", label: "Multiplicador" },
-  sync: { color: "#8acfdc", label: "Sincronia" },
+  heal: { color: "#39ff83", label: "Cura" },
+  critical: { color: "#ffbf00", label: "Crítico" },
+  boost: { color: "#cd43ff", label: "Multiplicador" },
+  sync: { color: "#00e8ff", label: "Sincronia" },
 };
 
 export function noteKind(note) {
@@ -20,6 +20,9 @@ function makeSprite(color, kind) {
   tile.width = tile.height = 68;
   const ctx = tile.getContext("2d");
   ctx.translate(34, 34);
+  const halo=ctx.createRadialGradient(0,0,14,0,0,34);
+  halo.addColorStop(0,color+"88"); halo.addColorStop(.73,color+"70"); halo.addColorStop(1,color+"00");
+  ctx.fillStyle=halo;ctx.fillRect(-34,-34,68,68);
   if (kind !== "normal") {
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -34,17 +37,17 @@ function makeSprite(color, kind) {
   ctx.fill();
   const bevel = ctx.createLinearGradient(0, -12, 0, 17);
   bevel.addColorStop(0, "#fff4dd");
-  bevel.addColorStop(.4, "#535668");
-  bevel.addColorStop(.72, "#242532");
-  bevel.addColorStop(1, "#b8aeb3");
+  bevel.addColorStop(.39, color);
+  bevel.addColorStop(.72, "#242132");
+  bevel.addColorStop(1, color);
   ctx.fillStyle = bevel;
   ctx.beginPath();
   ctx.ellipse(0, 3, 28, 16, 0, 0, Math.PI * 2);
   ctx.fill();
   const face = ctx.createRadialGradient(-5, -8, 2, 0, 0, 26);
   face.addColorStop(0, "#fff9e7");
-  face.addColorStop(.27, color);
-  face.addColorStop(.75, color);
+  face.addColorStop(.18, color);
+  face.addColorStop(.87, color);
   face.addColorStop(1, "#332632");
   ctx.fillStyle = face;
   ctx.beginPath();
@@ -128,7 +131,7 @@ function makeFlames() {
   });
 }
 
-function makeLightning(width, height) {
+function makeLightning(width, height, color, variant) {
   const tile = document.createElement("canvas");
   tile.width = Math.ceil(width); tile.height = Math.ceil(height);
   const c = tile.getContext("2d");
@@ -140,7 +143,7 @@ function makeLightning(width, height) {
     [main[6],[.18,.42],[.164,.455],[.28,.36]],
     [main[7],[-.13,.67],[-.18,.69],[-.26,.61]],
   ];
-  let seed=1619;
+  let seed=1619+273*variant;
   function stroke(points, weight, fork=false) {
     const path=new Path2D();
     path.moveTo(points[0][0]*width,points[0][1]*height);
@@ -154,8 +157,8 @@ function makeLightning(width, height) {
       }
     }
     c.lineJoin=c.lineCap="round";
-    for (const [scale,color] of [[7.5,"#8847ff25"],[3.7,"#955aff68"],[1.9,"#c6a8ffeb"],[1,"#fff9ff"]]) {
-      c.lineWidth=weight*scale; c.strokeStyle=color; c.stroke(path);
+    for (const [scale,ink] of [[8,color+"30"],[4,color+"9c"],[2,color],[.95,"#ffffff"]]) {
+      c.lineWidth=weight*scale; c.strokeStyle=ink; c.stroke(path);
     }
   }
   for(const fork of forks) stroke(fork,1,true);
@@ -214,6 +217,7 @@ export function createRail({
   let powerPercent = 0;
   let powerFlash = -Infinity;
   let streakStart = -Infinity;
+  let streakLane = 0;
   let wakeMotion;
   function setPower(active, energy) {
     const percent = Math.min(100, Math.max(0, Math.round(energy) || 0));
@@ -290,7 +294,7 @@ export function createRail({
     powerLight.style.insetInline = (w - near) / 2 + "px";
 
     background.clearRect(0, 0, w, h);
-    lightning = makeLightning(near*.75, travel*.94);
+    lightning = colors.map((c,i)=>makeLightning(Math.max(24,near/count*1.15),Math.max(40,travel*.85),c,i));
     // Draw the beveled sides and graded road surface once per resize.
     const road = background.createLinearGradient(0, top, 0, target);
     road.addColorStop(0, "#14131cee");
@@ -358,7 +362,7 @@ export function createRail({
       const x = mid + near * fractions[lane];
       background.fillStyle = "#141019";
       background.strokeStyle = colors[lane];
-      background.lineWidth = 1.75;
+      background.lineWidth = 2.6;
       background.beginPath();
       background.ellipse(x,target,radius+5,radius*.76+2,0,0,Math.PI*2);
       background.fill();
@@ -473,12 +477,13 @@ export function createRail({
     if (accelerated) gpu.finish();
     const boltAge = (stamp - streakStart) / 430;
     if (boltAge >= 0 && boltAge < 1 && lightning) {
+      const x=mid+near*fractions[streakLane],bolt=lightning[streakLane];
       ctx.save();
       ctx.globalAlpha = Math.min(1,(1-boltAge)*1.6);
-      ctx.drawImage(lightning,mid-lightning.width/2,target-lightning.height);
+      ctx.drawImage(bolt,x-bolt.width/2,target-bolt.height);
       ctx.globalAlpha=(1-boltAge)*.9;
-      ctx.strokeStyle="#d5a5ff";ctx.lineWidth=3*(1-boltAge)+1;
-      ctx.beginPath();ctx.ellipse(mid,target,12+near*.4*boltAge,3+28*boltAge,0,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle=colors[streakLane];ctx.lineWidth=3*(1-boltAge)+1;
+      ctx.beginPath();ctx.ellipse(x,target,12+near/count*.62*boltAge,3+18*boltAge,0,0,Math.PI*2);ctx.stroke();
       ctx.restore();
     }
     const flash = (stamp - powerFlash) / 330;
@@ -514,6 +519,13 @@ export function createRail({
         ctx.ellipse(x,y,r+spread*age,(r+spread*age)*.62,0,0,Math.PI*2);
         ctx.stroke();
         if (!reduced) {
+          if (age<.54) {
+            const bolt=lightning[burst.lane],width=bolt.width*.78;
+            const height=Math.min(travel*.38,125)*(1-.16*age);
+            ctx.globalAlpha=Math.max(0,1-age/.54);
+            ctx.drawImage(bolt,x-width/2,target-height,width,height);
+            ctx.globalAlpha=1-age;
+          }
           const size=53+14*Math.sin(age*Math.PI);
           ctx.drawImage(flames[Math.min(7,Math.floor(age*8))],x-size*.5,y-size*1.13,size,size*1.39);
         }
@@ -540,7 +552,8 @@ export function createRail({
     illuminate,
     laneAt,
     impact,
-    streak() {
+    streak(lane) {
+      streakLane = lane;
       streakStart = performance.now();
     },
     clearStreak() { streakStart = -Infinity; },

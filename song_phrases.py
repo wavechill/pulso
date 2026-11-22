@@ -8,7 +8,7 @@ import numpy as np
 FPS = 22050 / 256
 ROLES = ("voice", "lead", "bass", "drums")
 LABELS = {"voice":"Melodia vocal", "lead":"Riff e melodia", "bass":"Baixo", "drums":"Batida"}
-REVISION = 10
+REVISION = 11
 
 
 @dataclass
@@ -23,6 +23,7 @@ class Attack:
     outline: bool = False
     impact: float = 0
     accent: str = ""
+    focus: float = 0
 
     @property
     def role(self):
@@ -131,6 +132,20 @@ def _instrumental(chart, data):
         if part not in ("lead","bass"): continue
         strength = .78+.32*(t in medium)+.29*(t in easy)+.23*bool(n.get("duration"))
         attacks.append(Attack(t,part,strength,end=t+n.get("duration",0),key=n["lane"],outline=t in easy))
+    old_lead=[e for e in attacks if e.part=="lead"]
+    old_times=[e.t for e in old_lead]
+    for t,pitch,end,chord,weight,support in data.get("lead_gestures",()):
+        cut=bisect_left(old_times,t)
+        nearby=old_lead[max(0,cut-1):cut+1]
+        prior=min(nearby,key=lambda e:abs(e.t-t)) if nearby else None
+        if prior is not None and abs(prior.t-t)<=.047:
+            if not prior.focus or weight>prior.weight:
+                prior.pitch=pitch;prior.focus=support
+                prior.weight=max(prior.weight,weight)
+                prior.end=max(prior.end,end)
+                prior.chord=prior.chord or chord
+        elif support>=.33 and weight>=1.05:
+            attacks.append(Attack(t,"lead",weight,pitch,end,key=int(np.clip(round((pitch-42)/7),0,4)),chord=chord,focus=support))
     # The old instrumental chart already chose between instruments on each
     # attack. Recover actual kick and snare hits that a louder guitar masked.
     low,low_mid,mid,high,air = data["drums_flux"].T
@@ -195,11 +210,16 @@ def _phrases(chart, data, presence, confidence, kit, events):
         riff=np.clip((counts["lead"]-1.9)/2.8,0,1)*min(1,max(0,len(fingering)-1)/2)
         riff*=min(1,l/.28)*(.92-.32*v)
         notes=[n for n in group if n.role=="lead"]
+        pitched=[n.focus for n in notes if n.focus]
+        # Recognizable, articulated notes may be sparse, as in a fingerpicked
+        # intro or a piano reply. Volume and the number of notes miss both.
+        focus=(float(np.mean(pitched))*min(1,len(pitched)/max(1,.90*(b-a)))*
+               np.clip((l-.08)/.21,0,1)*max(.34,1-.55*v)) if pitched else 0
         texture=min(1.,counts["lead"]/4.6)*min(1.,max(0,len(fingering)-1)/1.8)
         if notes: texture*=.85+.15*min(1,3*sum(n.chord or n.outline for n in notes)/len(notes))
         riff_support.append(np.clip((l-.16)/.16,0,1)*texture*max(0,1-1.25*v))
         scores.append((.06+1.50*v*(.67+.33*phrased),
-                       .22+1.42*l+.21*min(1,counts["lead"]/2.8)+.42*riff,
+                       .22+1.42*l+.21*min(1,counts["lead"]/2.8)+.42*riff+.86*focus,
                        .13+1.47*ba+.14*min(1,counts["bass"]/2.6),
                        .17+1.33*d+.61*striking+.10*min(1,counts["drums"]/2.5)+.50*groove))
     # Viterbi on musical bars. Evidence must persist to change the player's
@@ -288,7 +308,7 @@ def _foreground(groups,roles,period,ticks):
                     if abs(delta)<.062:
                         agreement=1-abs(delta)/.062
                         e.weight+=.38*agreement
-                        if role!="voice": e.t=round(e.t+.62*agreement*delta,4)
+                        if role!="voice" and not e.focus: e.t=round(e.t+.62*agreement*delta,4)
                 pool.append(e)
                 continue
             k = np.searchsorted(main_times,e.t)
@@ -307,6 +327,8 @@ def _foreground(groups,roles,period,ticks):
             # punctuation is allowed between syllables even in a sung bar.
             accent = e.part in ("kick","snare") and e.weight>=1.22
             gap = (max(.145,.37*period) if role=="lead" else max(.20,.50*period)) if accent else max(.39,.98*period)
+            if e.part=="lead" and e.focus>=.52:
+                gap=min(gap,max(.18,.48*period))
             if distance>=gap and (accent or (e.weight>=1.06 and e.part!="hat")):
                 e.weight *= .87 if accent else .79
                 pool.append(e)
@@ -387,14 +409,21 @@ def _levels(pool, ticks, bpm):
 def _keys(pool, lanes):
     # Read a contour on a finite keyboard. Ranking all pitches globally alone
     # would collapse the low opening of a high chorus onto a single key.
-    pitches = [e.pitch for e in pool if e.part=="voice" and e.pitch>=0]
+    result=[round(e.key*(lanes-1)/4) for e in pool]
+    for part in ("voice","lead"):
+        indices=[i for i,e in enumerate(pool) if e.part==part and (part=="voice" or e.pitch>=0)]
+        if indices: _contour_keys(pool,indices,lanes,result)
+    return result
+
+
+def _contour_keys(pool,indices,lanes,result):
+    pitches = [pool[i].pitch for i in indices if pool[i].pitch>=0]
     thresholds = np.quantile(pitches,np.arange(1,lanes)/lanes) if pitches else []
-    keys=np.arange(lanes);result=[round(e.key*(lanes-1)/4) for e in pool]
-    voice=[i for i,e in enumerate(pool) if e.part=="voice"]
-    boundaries=[0]+[i for i in range(1,len(voice)) if pool[voice[i]].t-pool[voice[i-1]].t>1.2]+[len(voice)]
+    keys=np.arange(lanes)
+    boundaries=[0]+[i for i in range(1,len(indices)) if pool[indices[i]].t-pool[indices[i-1]].t>1.2]+[len(indices)]
     for a,b in zip(boundaries,boundaries[1:]):
         if a==b:continue
-        group=voice[a:b]
+        group=indices[a:b]
         p=np.array([pool[i].pitch for i in group])
         voiced=np.flatnonzero(p>=0)
         if not len(voiced):
@@ -416,7 +445,6 @@ def _keys(pool, lanes):
         for j in reversed(range(len(group))):
             result[group[j]]=lane
             if j:lane=int(path[j-1][lane])
-    return result
 
 
 def _ensemble_riffs(chart,spans,roles,presence,confidence):
@@ -538,8 +566,17 @@ def arrange(chart,data):
         roles=["lead" if preserve else role for preserve,role in zip(ensemble,roles)]
     sections=[]
     for (start,end),role in zip(spans,roles):
-        if sections and sections[-1]["role"]==role: sections[-1]["end"]=round(float(end),4)
-        else: sections.append(dict(start=round(float(start),4),end=round(float(end),4),role=role,label=LABELS[role]))
+        label=LABELS[role]
+        if role=="lead" and "lead_families" in data:
+            from instrument_focus import frame_index,FAMILIES
+            values=data["lead_families"]
+            a,b=frame_index([start,end],len(values))
+            evidence=values[a:b+1].mean(axis=0)
+            best=int(evidence.argmax())
+            if evidence[best]>.38 and evidence[best]-np.partition(evidence,-2)[-2]>.10:
+                label=FAMILIES[best]
+        if sections and sections[-1]["label"]==label: sections[-1]["end"]=round(float(end),4)
+        else: sections.append(dict(start=round(float(start),4),end=round(float(end),4),role=role,label=label))
     medium=chart["charts"]["medium"]
     stamps=[e["t"] for e in medium]
     for s in sections:

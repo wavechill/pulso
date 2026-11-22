@@ -22,12 +22,15 @@ import webbrowser
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.client import HTTPException
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
+from urllib.request import urlopen
 
 from audio_formats import FORMATS, MEDIA_TYPES, encode_audio
 from music_folder import MusicFolder, publish_audio, signature
-from performances import CATALOG_REVISION, candidates, identify as identify_recording, reviewed_chart
+from performances import CATALOG_REVISION, candidates, identify as identify_recording, pending_match, reviewed_chart
+from guitar_edition import can_retry
 from reductions import REVISION as PHRASING_REVISION, refine
 
 ROOT = Path(__file__).resolve().parent
@@ -54,12 +57,39 @@ LAN_LOCK = threading.Lock()
 PENDING_DOWNLOADS = {}
 ACTIVE_DOWNLOAD = None
 ACTIVE_CANCEL = None
+THUNDER_LOCK = threading.Lock()
+THUNDER_SHA256 = "c7e944cbaa27d135067de13a84a4a66104f769da6c19d2352a881a558ec7465c"
 
 
 class Problem(Exception):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
+
+
+def thunder_sound():
+    """Cache the effect served by Guitar Flash 3 for offline and LAN play."""
+    path = DATA / "efeitos" / "guitar-flash-explosao.wav"
+    with THUNDER_LOCK:
+        if path.is_file() and path.stat().st_size==46048 and hashlib.sha256(path.read_bytes()).hexdigest()==THUNDER_SHA256:
+            return path
+        try:
+            with urlopen("https://guitarflash3.com/data/game/audio/explosao.wav",timeout=6) as response:
+                sound=response.read(46049)
+            if hashlib.sha256(sound).hexdigest()!=THUNDER_SHA256:
+                raise ValueError
+            path.parent.mkdir(parents=True,exist_ok=True)
+            temp=None
+            try:
+                with tempfile.NamedTemporaryFile(dir=path.parent,delete=False) as f:
+                    temp=Path(f.name)
+                    f.write(sound)
+                os.replace(temp,path)
+            finally:
+                if temp is not None: temp.unlink(missing_ok=True)
+        except (OSError,HTTPException,ValueError):
+            raise Problem(503,"O estrondo do Guitar Flash está indisponível agora.")
+        return path
 
 
 def now_ms():
@@ -123,7 +153,7 @@ def current_song(song_id):
     info, audio, chart_path = entry
     from analysis_engine import VERSION
     def ready(meta):
-        return meta.get("analysisVersion", 0) >= VERSION and meta.get("phrasingRevision", 0) >= PHRASING_REVISION and (
+        return not (meta.get("pendingGuitar") and can_retry()) and meta.get("analysisVersion", 0) >= VERSION and meta.get("phrasingRevision", 0) >= PHRASING_REVISION and (
             meta.get("performanceScan", 0) >= CATALOG_REVISION
             or not candidates(meta.get("duration", 0)))
     if ready(info):
@@ -162,12 +192,16 @@ def current_song(song_id):
                     pass
             chart = candidate or analyze(audio, performance_directory=directory)
             changed = True
-        elif scan:
+        elif scan or info.get("pendingGuitar"):
             duration = info.get("duration") or chart["duration"]
-            match = identify_recording(audio, duration)
+            match = pending_match(chart) or identify_recording(audio, duration)
             if match:
-                chart = reviewed_chart(match, duration)
-                changed = True
+                result = reviewed_chart(match, duration)
+                if result is not None:
+                    chart,changed = result,True
+                elif match[0].get("external") and not chart.get("guitarReference"):
+                    chart["guitarReference"]=dict(id=match[0]["id"],clock=match[1])
+                    changed=True
         if chart.get("phrasingRevision", 0) < PHRASING_REVISION:
             refine(chart)
             changed = True
@@ -175,7 +209,7 @@ def current_song(song_id):
             json_write(chart_path, chart)
         refreshed = dict(info, bpm=chart["bpm"], engine=chart["engine"],
                          analysisVersion=chart["analysisVersion"], performanceScan=CATALOG_REVISION,
-                         phrasingRevision=PHRASING_REVISION)
+                         phrasingRevision=PHRASING_REVISION,pendingGuitar=bool(chart.get("guitarReference")))
         json_write(chart_path.with_name("info.json"), refreshed)
         with LOCK:
             info.update(refreshed)
@@ -399,7 +433,7 @@ def run_import(job, folder, source, original_title, url, copy_to_music=True, can
             info = {"id": song_id, "title": title, "artist": artist or ("YouTube" if url else "Arquivo local"),
                     "duration": data["duration"], "analysisVersion": data["analysisVersion"], "bpm": data.get("bpm", 0), "engine": data.get("engine", ""),
                     "kind": "youtube" if url else "file", "created": now_ms(), "performanceScan": CATALOG_REVISION,
-                    "phrasingRevision": PHRASING_REVISION}
+                    "phrasingRevision": PHRASING_REVISION,"pendingGuitar":bool(data.get("guitarReference"))}
             if JOBS[job]["videoId"]:
                 info["videoId"] = JOBS[job]["videoId"]
             cover = folder / "cover.jpg"
@@ -1291,6 +1325,9 @@ class Request(BaseHTTPRequestHandler):
         path = unquote(url.path)
         parts = path.strip("/").split("/")
         get = self.command in ("GET", "HEAD")
+        if get and path == "/api/efeitos/trovao":
+            self.serve_file(thunder_sound())
+            return
         if not path.startswith("/api/") and get:
             file = (WEB / (path.lstrip("/") or "index.html")).resolve()
             if not file.is_relative_to(WEB.resolve()) or not file.is_file():
@@ -1452,6 +1489,7 @@ def main():
     args = parser.parse_args()
     if args.data_dir:
         DATA = args.data_dir
+        os.environ["PULSO_DATA_DIR"]=str(DATA.resolve())
     interface = "127.0.0.1" if args.desktop else "0.0.0.0"
     with Server((interface, args.port), Request) as server:
         load_library()

@@ -15,8 +15,8 @@ SAMPLE_RATE = 22050
 HOP = 256
 FPS = SAMPLE_RATE / HOP
 MODEL = Path(__file__).parent / "models" / "basic-pitch" / "nmp.onnx"
-ENGINE = "Pulso 9 · frases da gravação"
-VERSION = 9
+ENGINE = "Pulso 10 · instrumentos em destaque"
+VERSION = 10
 
 
 def _decode(path, sample_rate=SAMPLE_RATE, side=False):
@@ -93,6 +93,7 @@ def _melody(audio, progress):
 
 
 def _instrument_features(path, progress, mix=None, featured=None):
+    from instrument_focus import family_profile, from_analysis_rate
     if mix is None:
         mix = _decode(path)
     size = len(mix)
@@ -104,6 +105,8 @@ def _instrument_features(path, progress, mix=None, featured=None):
         rms[start:start+len(block)] = np.sqrt((block * block).mean(axis=1))
     low_body = bass_resonance(mix, SAMPLE_RATE, HOP)
     repeats = repeating_tones(mix, SAMPLE_RATE, HOP)
+    progress("Reconhecendo guitarra, violão e piano")
+    mix_timbres=from_analysis_rate(mix)
     del window, mix
     spatial = _decode(path, side=True)
     if len(spatial)!=size:
@@ -128,6 +131,7 @@ def _instrument_features(path, progress, mix=None, featured=None):
         companion=featured["lead"].mean(axis=0)
     features["comp_flux"], features["comp_level"] = attack_features(companion,SAMPLE_RATE,HOP)
     features["comp_art"], features["comp_tones"] = articulation_features(companion,SAMPLE_RATE,HOP)
+    separated_timbres=from_analysis_rate(companion)
     del companion
     for name, samples in zip(("lead", "bass", "drums"), stems):
         features[name + "_flux"], features[name + "_level"] = attack_features(samples, SAMPLE_RATE, HOP)
@@ -136,6 +140,7 @@ def _instrument_features(path, progress, mix=None, featured=None):
             label = "a linha instrumental" if name == "lead" else "o baixo"
             strength, pitch, activity = _melody(samples, lambda msg: progress("Transcrevendo " + label + " · " + msg.split(" · ")[-1]))
             features.update({name + "_strength": strength, name + "_pitch": pitch, name + "_activity": activity})
+    features["lead_families"]=family_profile(mix_timbres,separated_timbres,features)
     return features
 
 
@@ -715,6 +720,53 @@ def _playable_holds(chart, tails, difficulty, head_frames=None):
         next_on_lane[lane] = next_head = t
 
 
+def _lead_gestures(data,line,tails):
+    """Picks and key strikes before the full-band chart chooses one part per slot."""
+    from instrument_focus import frame_index
+    rank,pitches,partners,attack=line
+    profile=data["lead_families"]
+    frames=np.flatnonzero((rank>=.43)&(pitches>=0))
+    frames=frames[profile[frame_index(frames/FPS,len(profile))].max(axis=1)>.18]
+    if not len(frames):return []
+    offsets=_attack_offsets(attack)
+    stamps=_head_times(data,frames,np.zeros(len(rank),dtype=int),(offsets,))
+    activity=data["lead_activity"]
+    events=[]
+    playable=pitches.copy()
+    for j in frames:
+        support=profile[frame_index(j/FPS,len(profile))]
+        family=int(np.argmax(support))
+        body=activity[j:j+7].max(axis=0).astype(float)
+        prior=activity[max(0,j-5):max(1,j-1)].mean(axis=0)
+        rise=np.maximum(0,body-prior)
+        p=int(pitches[j])
+        partner=int(partners[j])
+        if family!=2 and support[family]>.32:
+            opening=activity[min(j+1,len(activity)-1):j+7].mean(axis=0)
+            sounding=.55*opening+.45*np.maximum(0,opening-prior)
+            strong=int(np.argmax(sounding))
+            other=sounding.copy();other[max(0,strong-1):strong+2]=0
+            # Resolve a single picked string from its new pitched body. A clear
+            # harmonic should not make the virtual fret jump an octave.
+            if sounding[strong]>52 and sounding[strong]>1.43*other.max():
+                p,partner=strong,-1
+        # A pianist can strike a new treble key while a louder bass note
+        # rings under the pedal. Follow the newly struck pitch in that case.
+        if family==2 and support[family]>.42:
+            struck=np.flatnonzero((rise>np.maximum(26,.59*rise.max())) & (body>=65) & (np.arange(len(body))>=28))
+            if len(struck): p=int(struck[-1])
+        if body[p]<42 or (rise[p]<9 and rank[j]<.87):continue
+        t=stamps[j]
+        playable[j]=p
+        chord=(1 if abs(partner-p)<=5 else 2) if partner>=0 and partner!=p and family!=2 else 0
+        strength=min(2.45,.57+.65*min(2.,rank[j])+.19*min(1,rise[p]/65))
+        events.append((j,t,p+21,chord,strength,float(support[family])))
+    releases=tails
+    if np.any(playable!=pitches):
+        releases=_instrument_tails(np.flatnonzero(rank),playable,activity,data["lead_level"],rank)
+    return [(t,p,max(t,releases.get(j,j)/FPS),chord,weight,support) for j,t,p,chord,weight,support in events]
+
+
 def _instrument_map(data):
     rms = data["rms"]
     size = len(rms)
@@ -791,6 +843,8 @@ def _instrument_map(data):
     names = ("lead", "bass", "kick", "snare", "hat")
     drum_types = drum_curves.argmax(axis=1)
     offsets=(_attack_offsets(lines["lead"][3]),_attack_offsets(lines["bass"][3]),_attack_offsets(kit))
+    if "lead_families" in data:
+        data["lead_gestures"] = _lead_gestures(data,lines["lead"],tails["lead"])
     settings = (("easy", 3, .86, np.clip(.61*period, .26*FPS, .42*FPS), .46),
                 ("medium", 4, .70, np.clip(.34*period, .145*FPS, .235*FPS), .24),
                 ("hard", 5, .62, np.clip(.15*period, .071*FPS, .112*FPS), .07))
@@ -869,11 +923,14 @@ def analyze(path: Path, progress=None, *, performance_directory=None) -> dict:
     match = identify(path, duration)
     if match:
         notify("Preparando o arranjo desta gravação")
-        return refine(reviewed_chart(match, duration))
+        reviewed = reviewed_chart(match, duration)
+        if reviewed is not None: return refine(reviewed)
     featured = {} if performance_directory is not None else None
     data = _instrument_features(path, notify, mix, featured=featured)
     notify("Escolhendo as frases de voz, riff, baixo e bateria")
     chart = refine(arrange(_instrument_map(data), data))
+    if match and match[0].get("external"):
+        chart["guitarReference"] = dict(id=match[0]["id"],clock=match[1])
     if featured and chart.get("performance"):
         from performances import render
         section_info=chart["performance"]

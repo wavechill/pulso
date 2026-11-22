@@ -30,6 +30,13 @@ WEBVIEW = (
     "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4258.31/microsoft.web.webview2.1.0.4258.31.nupkg",
     "56f7f4b8bf9aee4b8efefbbdd4f67d5f74ebd1b100ed0806da71bf76af481aa9",
 )
+FIXED_VERSION = "158.0.4370.33"
+FIXED_DIRECTORY = f"Microsoft.WebView2.FixedVersionRuntime.{FIXED_VERSION}.x64"
+FIXED_WEBVIEW = (
+    "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/"
+    f"ecc2761e-1380-46ee-9552-995b039e4e47/{FIXED_DIRECTORY}.cab",
+    "835da387df67797f710881f553bb6934d98f24d08e370456f48d38ed4e072b62",
+)
 FFMPEG = (
     "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-20-12-40/"
     "ffmpeg-n8.1.3-39-g660b5aa7db-win64-lgpl-shared-8.1.zip",
@@ -41,7 +48,7 @@ DENO = (
 )
 
 
-def download(target, url, expected):
+def download_file(target, url, expected):
     def verified(file):
         if not file.is_file():
             return False
@@ -58,7 +65,25 @@ def download(target, url, expected):
             draft.replace(target)
         finally:
             draft.unlink(missing_ok=True)
-    return ZipFile(target)
+    return target
+
+
+def download(target, url, expected):
+    return ZipFile(download_file(target, url, expected))
+
+
+def bundle_webview(runtime, downloads):
+    cab = download_file(downloads / f"webview2-fixed-{FIXED_VERSION}-x64.cab", *FIXED_WEBVIEW)
+    runtime = runtime.resolve()
+    package = runtime / FIXED_DIRECTORY
+    destination = runtime / "webview2"
+    if destination.exists() or package.exists():
+        raise FileExistsError("O destino do WebView2 precisa estar livre.")
+    subprocess.run([str(Path(os.environ["SystemRoot"]) / "System32/expand.exe"),
+                    str(cab.resolve()), "-F:*", str(runtime)], check=True, stdout=subprocess.DEVNULL)
+    if package.resolve().parent != runtime or not (package / "msedgewebview2.exe").is_file():
+        raise RuntimeError("O pacote da Microsoft não contém a distribuição esperada.")
+    package.rename(destination)
 
 
 def copy_member(archive, name, output):
@@ -111,6 +136,7 @@ def build(output, work):
         copy_member(archive, "runtimes/win-x64/native/WebView2Loader.dll", output / "WebView2Loader.dll")
         for name in ("LICENSE", "NOTICE"):
             copy_member(archive, name + ".txt", notices / f"WebView2-{name}.txt")
+    bundle_webview(output / "runtime", downloads)
     for name in ("web", "demo", "models", "arrangements"):
         shutil.copytree(ROOT / name, app / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     for name in ("server.py", "importer.py", "music_folder.py", "analysis_engine.py", "instrumental.py", "performances.py", "reductions.py", "song_phrases.py", "vocal_pitch.py", "audio_formats.py"):

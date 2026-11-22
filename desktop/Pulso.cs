@@ -9,7 +9,9 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -19,8 +21,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Pulso")]
 [assembly: AssemblyProduct("Pulso")]
 [assembly: AssemblyDescription("Jogo de ritmo para Windows")]
-[assembly: AssemblyVersion("1.11.0.0")]
-[assembly: AssemblyFileVersion("1.11.0.0")]
+[assembly: AssemblyVersion("1.11.1.0")]
+[assembly: AssemblyFileVersion("1.11.1.0")]
 
 internal static class Program
 {
@@ -69,7 +71,7 @@ internal sealed class PulsoWindow : WindowFrame
     private readonly Uri firstPage;
     private readonly string data;
     private readonly Label startup;
-    private readonly WebView2 view = new WebView2();
+    private WebView2 view;
     private readonly HttpClient http = new HttpClient(new HttpClientHandler { UseProxy = false });
     private readonly RegisteredWaitHandle focusRegistration;
     private readonly object logLock = new object();
@@ -96,10 +98,6 @@ internal sealed class PulsoWindow : WindowFrame
             ForeColor = Color.FromArgb(244, 243, 234),
             TextAlign = ContentAlignment.MiddleCenter
         };
-        view.DefaultBackgroundColor = BackColor;
-        view.Dock = DockStyle.Fill;
-        view.Visible = false;
-        Controls.Add(view);
         Controls.Add(startup);
         FloatWindowButtons();
         http.Timeout = TimeSpan.FromMilliseconds(900);
@@ -175,6 +173,100 @@ internal sealed class PulsoWindow : WindowFrame
         server.BeginErrorReadLine();
     }
 
+    private bool PreferInstalledRuntime(string portableExe)
+    {
+        if (!File.Exists(portableExe)) return true;
+        try
+        {
+            string installed = CoreWebView2Environment.GetAvailableBrowserVersionString();
+            string bundled = FileVersionInfo.GetVersionInfo(portableExe).ProductVersion;
+            return !String.IsNullOrEmpty(installed) &&
+                CoreWebView2Environment.CompareBrowserVersions(installed, bundled) >= 0;
+        }
+        catch (WebView2RuntimeNotFoundException) { return false; }
+        catch (Exception error) { WriteLog(error.Message); return false; }
+    }
+
+    private void AllowSandboxToReadRuntime(string folder)
+    {
+        // Microsoft's Fixed Version distribution requires these two read-only
+        // grants for unpackaged apps on Windows 10. Limit them to the engine.
+        var os = Environment.OSVersion.Version;
+        if (os.Major != 10 || os.Build >= 22000) return;
+        var directory = new DirectoryInfo(folder);
+        if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) return;
+        try
+        {
+            var acl = directory.GetAccessControl();
+            var rights = FileSystemRights.ReadAndExecute;
+            var inherit = InheritanceFlags.ObjectInherit | InheritanceFlags.ContainerInherit;
+            bool changed = false;
+            foreach (string id in new[] { "S-1-15-2-1", "S-1-15-2-2" })
+            {
+                var sid = new SecurityIdentifier(id);
+                bool granted = false;
+                foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+                    if (rule.IdentityReference.Equals(sid) && rule.AccessControlType == AccessControlType.Allow &&
+                        (rule.FileSystemRights & rights) == rights && (rule.InheritanceFlags & inherit) == inherit &&
+                        rule.PropagationFlags == PropagationFlags.None) granted = true;
+                if (granted) continue;
+                acl.AddAccessRule(new FileSystemAccessRule(sid, rights, inherit, PropagationFlags.None, AccessControlType.Allow));
+                changed = true;
+            }
+            if (changed) directory.SetAccessControl(acl);
+        }
+        catch (UnauthorizedAccessException ex) { WriteLog(ex.Message); }
+        catch (IOException ex) { WriteLog(ex.Message); }
+    }
+
+    private async Task<bool> TryRuntime(string folder)
+    {
+        if (IsDisposed || (folder != null && !File.Exists(Path.Combine(folder, "msedgewebview2.exe")))) return false;
+        WebView2 candidate = null;
+        try
+        {
+            if (folder != null) AllowSandboxToReadRuntime(folder);
+            var environment = await CoreWebView2Environment.CreateAsync(folder, Path.Combine(data, "webview"));
+            if (IsDisposed) return false;
+            candidate = new WebView2 { DefaultBackgroundColor = BackColor, Dock = DockStyle.Fill, Visible = false };
+            Controls.Add(candidate);
+            await candidate.EnsureCoreWebView2Async(environment);
+            if (IsDisposed) return false;
+            view = candidate;
+            WriteLog("Janela " + (folder == null ? "do sistema" : "portátil") + " · WebView2 " + environment.BrowserVersionString);
+            return true;
+        }
+        catch (Exception error)
+        {
+            WriteLog("Falha ao abrir WebView2 " + (folder ?? "do sistema") + ": " + error.Message);
+            return false;
+        }
+        finally { if (candidate != null && candidate != view) candidate.Dispose(); }
+    }
+
+    private void OfferBrowser()
+    {
+        startup.Visible = false;
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 1 };
+        var panel = new FlowLayoutPanel { AutoSize = true, Anchor = AnchorStyles.None, WrapContents = false,
+            FlowDirection = FlowDirection.TopDown, Padding = new Padding(16) };
+        var status = new Label { AutoSize = true, MaximumSize = new Size(460, 0), ForeColor = Color.WhiteSmoke,
+            Font = new Font("Segoe UI", 12f), Text = "A janela do jogo não abriu. Você pode jogar no navegador deste PC. Mantenha o Pulso aberto durante a partida." };
+        var address = new TextBox { ReadOnly = true, Width = 340, Text = firstPage.AbsoluteUri, Margin = new Padding(3, 12, 3, 12) };
+        var play = new Button { Text = "Jogar no navegador", AutoSize = true, Padding = new Padding(8),
+            BackColor = Color.Coral, FlatStyle = FlatStyle.Flat };
+        play.Click += (s, e) => {
+            try { Process.Start(new ProcessStartInfo(firstPage.AbsoluteUri) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { status.Text = "Copie o endereço abaixo e abra-o no seu navegador."; address.SelectAll(); address.Focus(); }
+        };
+        panel.Controls.AddRange(new Control[] { status, address, play });
+        layout.Controls.Add(panel);
+        Controls.Add(layout);
+        layout.BringToFront();
+        AcceptButton = play;
+        FloatWindowButtons();
+    }
+
     private async Task Launch()
     {
         try
@@ -197,14 +289,12 @@ internal sealed class PulsoWindow : WindowFrame
                     throw new InvalidOperationException("O servidor local do Pulso não abriu. Consulte app.log na pasta de dados do Pulso.");
             }
             if (IsDisposed) return;
-            try
+            string portable = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtime", "webview2");
+            bool systemFirst = PreferInstalledRuntime(Path.Combine(portable, "msedgewebview2.exe"));
+            if (!await TryRuntime(systemFirst ? null : portable) && !await TryRuntime(systemFirst ? portable : null))
             {
-                var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(data, "webview"));
-                await view.EnsureCoreWebView2Async(environment);
-            }
-            catch (WebView2RuntimeNotFoundException)
-            {
-                throw new InvalidOperationException("Este Windows precisa do Microsoft Edge WebView2 Runtime para abrir a janela do Pulso.");
+                if (!IsDisposed) OfferBrowser();
+                return;
             }
             if (IsDisposed) return;
             var core = view.CoreWebView2;

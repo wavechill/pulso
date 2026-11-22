@@ -6,7 +6,7 @@ Player local e jogo de ritmo para teclado. Ouça suas músicas, gere mapas com t
 
 [Baixar Pulso para Windows x64](https://github.com/wavechill/pulso/releases/latest/download/Pulso-Windows-x64.zip)
 
-Extraia o ZIP inteiro e abra `Pulso.exe`. O aplicativo usa o Microsoft Edge WebView2 do Windows e roda sem instalação ou elevação. Três faixas originais acompanham o jogo.
+Extraia o ZIP inteiro e abra `Pulso.exe`. O WebView2 vem na pasta `runtime/webview2`, para a janela funcionar offline mesmo em um PC sem esse componente instalado. O Pulso roda sem administrador. Três faixas originais acompanham o jogo.
 
 ## Ouvir e jogar
 

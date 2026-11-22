@@ -3,7 +3,8 @@ Jogo de ritmo para teclado • Windows
 
 Abrir
 Windows portátil. Extraia o ZIP inteiro e dê dois cliques em Pulso.exe. O jogo abre em sua própria janela, por usuário, sem instalador ou elevação. Mantenha app e runtime junto ao exe. As três faixas originais estão prontas para jogar offline. Ao fechar a janela, a sala hospedada pelo app também fecha.
-Versão de navegador. Dê dois cliques em “Iniciar Pulso.cmd” e mantenha o servidor aberto. O navegador abre em http://localhost:8765.
+A pasta runtime/webview2 contém o componente da janela do jogo. Ele também funciona offline em computadores sem o WebView2 instalado. Se o Windows impedir a abertura da janela, use “Jogar no navegador” e mantenha a janela do Pulso aberta enquanto joga.
+Na versão de código-fonte, “Iniciar Pulso.cmd” abre o jogo em http://localhost:8765.
 
 Player
 O Pulso abre no Player. Escolha uma faixa da biblioteca, monte a fila e use os controles de volume, reprodução aleatória e repetição. A música continua pelas abas e pausa quando a partida começa. Use “Jogar esta música” na faixa selecionada para abrir a partida. O olhinho remove uma faixa do Player e da fila. Use “Ocultas” para voltar a exibi-la. A lixeira exclui o áudio e o mapa das faixas importadas, incluindo as cópias correspondentes na pasta Músicas do Pulso.

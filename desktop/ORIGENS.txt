@@ -16,8 +16,9 @@ O Pulso usa o Deno v2.9.7 e o yt-dlp v2026.10.26 para importação de links.
 https://github.com/denoland/deno/releases/tag/v2.9.7
 https://github.com/yt-dlp/yt-dlp/tree/2026.10.26
 
-WebView2 SDK 1.0.4258.31. A janela usa o runtime Evergreen do computador.
+WebView2 SDK 1.0.4258.31 e Microsoft Edge WebView2 Fixed Version Runtime 158.0.4370.33 x64, distribuído na pasta runtime/webview2. A janela também pode usar o Evergreen instalado. O pacote de runtime vem da Microsoft.
 https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
+https://developer.microsoft.com/microsoft-edge/webview2/
 
 Modelo Basic Pitch do Spotify e fonte Barlow. Licenças em app/models/basic-pitch e app/web/fonts.
 Separação instrumental com os quatro modelos Open-Unmix UMX-HQ. Pesos originais publicados pelos autores em https://zenodo.org/records/3370489. A licença e as assinaturas dos modelos distribuídos estão em app/models/umxhq.

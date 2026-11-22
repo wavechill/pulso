@@ -15,7 +15,7 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 WHEELS = (
-    "numpy==2.5.4", "onnxruntime==1.31.1", "yt-dlp==2026.10.26",
+    "numpy==2.5.4", "onnxruntime-directml==1.24.4", "yt-dlp==2026.10.26",
     "yt-dlp-ejs==0.8.0", "brotli==1.2.1", "certifi==2026.10.23",
     "charset-normalizer==3.5.2", "flatbuffers==25.12.19", "idna==3.20",
     "mutagen==1.48.1", "packaging==26.3", "protobuf==7.36.2",
@@ -111,9 +111,9 @@ def build(output, work):
         copy_member(archive, "runtimes/win-x64/native/WebView2Loader.dll", output / "WebView2Loader.dll")
         for name in ("LICENSE", "NOTICE"):
             copy_member(archive, name + ".txt", notices / f"WebView2-{name}.txt")
-    for name in ("web", "demo", "models"):
+    for name in ("web", "demo", "models", "arrangements"):
         shutil.copytree(ROOT / name, app / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ("server.py", "importer.py", "music_folder.py", "analysis_engine.py", "audio_formats.py"):
+    for name in ("server.py", "importer.py", "music_folder.py", "analysis_engine.py", "instrumental.py", "performances.py", "reductions.py", "song_phrases.py", "vocal_pitch.py", "audio_formats.py"):
         shutil.copy2(ROOT / name, app / name)
     shutil.copy2(ROOT / "LEIA-ME.txt", output)
     shutil.copy2(ROOT / "desktop" / "ORIGENS.txt", notices)

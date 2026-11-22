@@ -15,6 +15,7 @@ import { renderBattleLegend } from "./battle-hud.js";
 import { createImporter } from "./import-library.js";
 import { mountConverter } from "./converter.js";
 import { unlock, prepare, startGame } from "./game.js";
+import { readGuitarChart } from "./guitar-chart.js";
 import { createMusicPlayer } from "./player.js";
 const view = $("#view"),
   dlg = $("#modal");
@@ -72,12 +73,7 @@ function byId(id) {
   return state.songs.find((s) => s.id === id);
 }
 function cover(s) {
-  return esc(
-    s.cover ||
-      "/art/" +
-        ["orbita", "mare-baixa", "vidro-azul"][s.id.charCodeAt(0) % 3] +
-        ".jpg",
-  );
+  return esc(s.cover || "/icon.svg");
 }
 const player = createMusicPlayer({
   dock: $("#player-dock"),
@@ -409,8 +405,7 @@ function tracks() {
     .querySelectorAll("[data-play]")
     .forEach((b) => (b.onclick = () => chooseSolo(byId(b.dataset.play))));
 }
-function diffs() {
-  let d = prefs().difficulty;
+function diffs(d = prefs().difficulty) {
   return (
     '<div class="diffs">' +
     Object.entries(diffnames)
@@ -432,10 +427,11 @@ function diffs() {
 }
 function wireDiff(root) {
   function keys() {
+    const active = root.querySelector("[data-diff].on").dataset.diff;
     root.querySelector(".keyset").innerHTML =
       icon("keyboard") +
       " &nbsp;" +
-      lanes[prefs().difficulty]
+      lanes[active]
         .map((i) => "<kbd>" + esc(prefs().keys[i]) + "</kbd>")
         .join("");
   }
@@ -451,32 +447,109 @@ function wireDiff(root) {
       }),
   );
 }
-function chooseSolo(s, returnTo = screen === "player" ? "player" : "library") {
+const authoredCharts = new Map();
+const guitarFlashSong = "https://guitarflash3.com/setlist/system-of-a-down/chop-suey/?lg=pt";
+function chooseSolo(s, returnTo = screen === "player" ? "player" : "library", openPractice = false) {
   stopPreview();
   selected = s.id;
-  const mode = prefs().soloMode === "practice" ? "practice" : "normal";
+  const mode = openPractice || prefs().soloMode === "practice" ? "practice" : "normal";
+  const chop = /\bchop\s+suey\b/i.test(s.title) &&
+    /\b(system\s+of\s+a\s+down|soad)\b/i.test(s.title + " " + s.artist);
+  let authored = authoredCharts.get(s.id);
   showModal(
     "Jogar solo",
     rowCard(s) +
       '<div class="divline"></div><fieldset class="solo-mode"><legend>Modo</legend>' +
       `<label><input type="radio" name="solo-mode" value="normal" ${mode === "normal" ? "checked" : ""}><span><strong>Normal</strong><small>Reinicia ao zerar a vida</small></span></label>` +
       `<label><input type="radio" name="solo-mode" value="practice" ${mode === "practice" ? "checked" : ""}><span><strong>Treino</strong><small>Toque até o fim</small></span></label>` +
-      "</fieldset><strong>Dificuldade</strong>" +
-      diffs() +
-      '<p class="small play-guide">Toque ao chegar no círculo. Quando a nota tiver uma cauda, mantenha a tecla até ela terminar.</p><button class="btn primary wide" id="start">' +
+      '</fieldset><div id="automatic-difficulty"><strong>Dificuldade</strong>' +
+      diffs(openPractice && chop ? "hard" : prefs().difficulty) + '</div>' +
+      '<div class="practice-options" id="practice-options">' +
+      (s.kind === "demo" ? '' : '<label><input type="checkbox" id="isolated-audio"> Ouvir só a parte indicada no trilho</label>') +
+      (chop ? '<label><input type="checkbox" id="riff-loop"> Repetir o riff de 0:32 a 0:48</label>' : '') +
+      '</div><details class="map-file"><summary>Usar um mapa .chart</summary>' +
+      '<p class="small">Escolha um mapa de guitarra feito para esta mesma gravação.</p>' +
+      '<label class="chart-file-label">Arquivo de notas<input type="file" id="authored-file" accept=".chart"></label>' +
+      '<label id="map-source-label" hidden>Mapa da partida<select id="map-source"></select></label>' +
+      '<small id="chart-credit"></small></details>' +
+      (chop ? '<a class="reference-game" id="reference-original" href="' + guitarFlashSong + '" target="_blank" rel="noopener noreferrer">Jogar o original no Guitar Flash 3 <span aria-hidden="true">↗</span></a>' : '') +
+      '<p class="small play-guide">Siga a parte em destaque. Segure as notas com cauda e aperte juntas as teclas que chegarem lado a lado.</p><button class="btn primary wide" id="start">' +
       icon("play") +
       'Começar</button><div class="notice" id="modal-error"></div>',
   );
   wireDiff(dlg);
+  const source = $("#map-source"), file = $("#authored-file"), isolation = $("#isolated-audio");
+  const start = $("#start"), notice = $("#modal-error");
+  function updateOptions() {
+    const practice = dlg.querySelector('[name="solo-mode"]:checked').value === "practice";
+    $("#practice-options").hidden = !practice;
+    $("#automatic-difficulty").hidden = !!source.value;
+    if (isolation) {
+      isolation.disabled = !!source.value;
+      isolation.parentElement.hidden = !!source.value;
+    }
+    if (authored) authored.selection = source.value;
+    notice.textContent = "";
+  }
+  function showFile() {
+    if (!authored) return;
+    const list = authored.chart;
+    source.replaceChildren(new Option("Mapa automático do Pulso", ""));
+    for (const key of list.tracks) source.add(new Option(list.labels[key] + " · cinco teclas", key));
+    source.value = authored.selection;
+    $("#map-source-label").hidden = false;
+    $("#chart-credit").textContent = [authored.filename, list.name, list.charter].filter(Boolean).join(" · ");
+    dlg.querySelector(".map-file").open = true;
+  }
+  showFile();
+  updateOptions();
+  if (openPractice && chop) $("#riff-loop").checked = true;
+  dlg.querySelector(".solo-mode").onchange = updateOptions;
+  source.onchange = updateOptions;
+  let fileRead = 0;
+  file.onchange = async () => {
+    const read = ++fileRead;
+    const selectedFile = file.files[0];
+    if (!selectedFile) { start.disabled = false; return; }
+    start.disabled = true;
+    try {
+      if (selectedFile.size > 4 * 1024 * 1024) throw Error("O arquivo .chart pode ter até 4 MB.");
+      const chart = readGuitarChart(await selectedFile.text());
+      if (!file.isConnected || read !== fileRead) return;
+      authored = {chart, filename: selectedFile.name, selection: chart.tracks[0]};
+      authoredCharts.set(s.id, authored);
+      showFile();
+      updateOptions();
+    } catch (error) {
+      if (read === fileRead) {
+        file.value = "";
+        notice.textContent = error.message;
+      }
+    } finally {
+      if (read === fileRead) start.disabled = false;
+    }
+  };
+  if (chop) $("#reference-original").onclick = event => {
+    player.pause();
+    if (window.pulsoDesktop) {
+      event.preventDefault();
+      window.chrome.webview.postMessage("guitar-flash:chop-suey");
+    }
+  };
   $("#start").onclick = guard(async () => {
     const btn = $("#start");
     const soloMode = dlg.querySelector('[name="solo-mode"]:checked').value;
     save({ soloMode });
     btn.disabled = true;
-    btn.textContent = "Preparando áudio…";
+    file.disabled = source.disabled = true;
+    btn.textContent = "Preparando mapa e áudio…";
     try {
+      const map = source.value ? authored.chart.playable(source.value, s.duration) : null;
+      const difficulty = map ? "hard" : dlg.querySelector("[data-diff].on").dataset.diff;
+      const isolated = soloMode === "practice" && !map && !!isolation?.checked;
+      const riff = chop && soloMode === "practice" && $("#riff-loop").checked;
       await unlock();
-      const track = await prepare(s);
+      const track = await prepare(s, message => { btn.textContent = message; }, {map, isolated});
       if (!dlg.open || !btn.isConnected) return;
       dlg.close();
       goNav("game");
@@ -484,12 +557,15 @@ function chooseSolo(s, returnTo = screen === "player" ? "player" : "library") {
         view,
         s,
         track,
-        diff: prefs().difficulty,
+        diff: difficulty,
         practice: soloMode === "practice",
+        practiceLoop: riff ? {from:32, to:48} : null,
+        offerEncore: true,
         onEnd: (stats) => result(stats, returnTo),
         onExit: () => navigate(returnTo),
       });
     } finally {
+      file.disabled = source.disabled = false;
       btn.disabled = false;
       btn.textContent = "Começar";
     }
@@ -511,7 +587,7 @@ function result(stats, returnTo = "library") {
       ? team.won
         ? "Chefe derrotado"
         : "Fim da batalha"
-      : "Faixa concluída") +
+      : stats.sought ? "Trecho concluído" : stats.rounds === 2 ? "Duas rodadas concluídas" : "Faixa concluída") +
     "</h1>" +
     rowCard(s) +
     (team
@@ -591,11 +667,20 @@ function importModal() {
 }
 function settings() {
   const p = prefs();
+  const captureHelp = window.pulsoDesktop
+    ? '<details class="obs-help"><summary>Gravar com OBS Studio</summary><ol>' +
+      '<li>Adicione <strong>Captura de janela</strong> e selecione <strong>[Pulso.exe] Pulso</strong>.</li>' +
+      '<li>Em <strong>Método de captura</strong>, selecione <strong>Windows 10 (1903 ou superior)</strong>.</li>' +
+      '<li>Use <strong>Áudio do desktop</strong> no mixer do OBS e selecione a saída usada pelo Pulso. Essa fonte também capta outros sons dessa saída.</li>' +
+      '</ol></details>'
+    : "";
   showModal(
     "Configurações",
-    '<label class="field"><span class="settings-label">Volume <output id="vol-out"></output></span><input id="vol" type="range" min="0" max="100" value="' +
+    '<label class="field"><span class="settings-label">Volume da música <output id="vol-out"></output></span><input id="vol" type="range" min="0" max="100" value="' +
       Math.round(p.volume * 100) +
-      '"></label><div class="divline"></div><strong>Teclas das pistas</strong><p class="small">Selecione uma tecla e pressione a nova letra.</p><div class="keyset">' +
+      '"></label><label class="field"><span class="settings-label">Efeitos da partida <output id="fx-vol-out"></output></span><input id="fx-vol" type="range" min="0" max="100" value="' +
+      Math.round(p.effectsVolume * 100) +
+      '"></label><label class="field">Fundo da partida<select id="game-backdrop"><option value="art">Capa da música</option><option value="black">Preto</option></select></label><div class="divline"></div><strong>Teclas das pistas</strong><p class="small">Selecione uma tecla e pressione a nova letra.</p><div class="keyset">' +
       p.keys
         .map(
           (v, i) =>
@@ -606,14 +691,18 @@ function settings() {
             "</button>",
         )
         .join("") +
-      '</div><div class="notice" id="modal-error"></div><button id="save-settings" class="btn primary wide">Salvar</button>',
+      '</div><div class="notice" id="modal-error"></div><button id="save-settings" class="btn primary wide">Salvar</button>' +
+      captureHelp,
   );
   let key = -1;
+  $("#game-backdrop").value = p.gameBackdrop;
   const reflect = () => {
     $("#vol-out").value = $("#vol").value + "%";
+    $("#fx-vol-out").value = $("#fx-vol").value + "%";
   };
   reflect();
   $("#vol").oninput = reflect;
+  $("#fx-vol").oninput = reflect;
   dlg.querySelectorAll(".remap").forEach((b) => {
     b.onclick = () => {
       dlg
@@ -639,6 +728,8 @@ function settings() {
     save({
       keys: p.keys,
       volume: +$("#vol").value / 100,
+      effectsVolume: +$("#fx-vol").value / 100,
+      gameBackdrop: $("#game-backdrop").value,
     });
     dlg.close();
     toast("Configurações salvas");
@@ -676,7 +767,9 @@ function coop() {
   wireDiff(view);
   $("#create").onclick = guard(async () => {
     let b = $("#create");
+    const original = b.innerHTML;
     b.disabled = true;
+    b.textContent = "Preparando mapa da sala…";
     try {
       const name = $("#name").value.trim() || "Jogador 1";
       save({ name });
@@ -691,6 +784,7 @@ function coop() {
       );
     } finally {
       b.disabled = false;
+      b.innerHTML = original;
     }
   });
   $("#join").onclick = guard(() => openInvite($("#room-code").value));
@@ -824,15 +918,15 @@ async function openRoom(credential) {
   btn.onclick = guard(async () => {
     btn.disabled = true;
     r.preparing = true;
-    btn.textContent = "Preparando áudio…";
+    btn.textContent = "Preparando mapa e áudio…";
     try {
       await unlock();
-      r.track = await prepare(byId(r.snapshot.songId));
+      r.track = await prepare(byId(r.snapshot.songId), message => { btn.textContent = message; });
       const samples = [];
       for (let i = 0; i < 4; i++) {
-        const a = Date.now();
+        const a = performance.now();
         const t = await api("time");
-        const b = Date.now();
+        const b = performance.now();
         samples.push({ rtt: b - a, offset: t.serverTime - (a + b) / 2 });
       }
       r.clock = samples.sort((a, b) => a.rtt - b.rtt)[0].offset;
@@ -908,7 +1002,7 @@ async function openRoom(credential) {
           s: byId(snap.songId),
           track: r.track,
           diff: snap.players[snap.me].difficulty,
-          delay: () => (snap.startAt - Date.now() - r.clock) / 1000,
+          delay: () => (snap.startAt - performance.now() - r.clock) / 1000,
           room: snap,
           onHits: (indices, holds) => action(r, "hits", { indices, holds }),
           onFinish: () => action(r, "finish"),
@@ -987,10 +1081,16 @@ $("#settings").onclick = () => {
 async function boot() {
   try {
     await refresh();
-    let code = new URL(location.href).searchParams.get("sala");
+    const params = new URL(location.href).searchParams;
+    const code = params.get("sala"), practiceSong = byId(params.get("treinar"));
     if (code) {
       coop();
       await joinPrompt(code);
+    } else if (state.isHost && practiceSong) {
+      selected = practiceSong.id;
+      mountLibrary();
+      chooseSolo(practiceSong, "library", true);
+      history.replaceState(null, "", location.pathname);
     } else if (state.isHost) mountPlayer();
     else mountLibrary();
     if (state.isHost) importer.resume();

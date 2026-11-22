@@ -1,4 +1,5 @@
 const shapes = {
+  scenery: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.4"/><path d="m4 17 5-5 3 3 3.5-5 5 7"/>',
   folder:
     '<path d="M3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8l-2-3H5a2 2 0 0 0-2 2z"/><path d="M3 10h18"/>',
   refresh:
@@ -95,6 +96,8 @@ export function prefs() {
     keys: ["A", "S", "J", "K", "L"],
     difficulty: "medium",
     volume: 0.8,
+    effectsVolume: 0.38,
+    gameBackdrop: "art",
     soloMode: "normal",
     name: "",
     ...Object.fromEntries(
@@ -103,6 +106,8 @@ export function prefs() {
           "keys",
           "difficulty",
           "volume",
+          "effectsVolume",
+          "gameBackdrop",
           "name",
           "playerVolume",
           "soloMode",

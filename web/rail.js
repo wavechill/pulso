@@ -27,10 +27,34 @@ function makeSprite(color, kind) {
     ctx.arc(0, 0, 30, 0, Math.PI * 2);
     ctx.stroke();
   }
-  ctx.fillStyle = color;
+  // The elliptical rim, bevel and enamel all share one cached GPU tile.
+  ctx.fillStyle = "#090b12";
   ctx.beginPath();
-  ctx.arc(0, 0, 24, 0, Math.PI * 2);
+  ctx.ellipse(0, 7, 29, 16, 0, 0, Math.PI * 2);
   ctx.fill();
+  const bevel = ctx.createLinearGradient(0, -12, 0, 17);
+  bevel.addColorStop(0, "#fff4dd");
+  bevel.addColorStop(.4, "#535668");
+  bevel.addColorStop(.72, "#242532");
+  bevel.addColorStop(1, "#b8aeb3");
+  ctx.fillStyle = bevel;
+  ctx.beginPath();
+  ctx.ellipse(0, 3, 28, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const face = ctx.createRadialGradient(-5, -8, 2, 0, 0, 26);
+  face.addColorStop(0, "#fff9e7");
+  face.addColorStop(.27, color);
+  face.addColorStop(.75, color);
+  face.addColorStop(1, "#332632");
+  ctx.fillStyle = face;
+  ctx.beginPath();
+  ctx.ellipse(0, -1, 24, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = "#fff4df60";
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 20, 10.2, 0, Math.PI * 1.08, Math.PI * 1.87);
+  ctx.stroke();
   ctx.fillStyle = "#1a221d";
   ctx.strokeStyle = "#1a221d";
   ctx.lineWidth = 4;
@@ -70,6 +94,75 @@ function makeSprite(color, kind) {
   return tile;
 }
 
+// A tiny original flame atlas also works on the software renderer.
+function makeFlames() {
+  return Array.from({length: 8}, (_, phase) => {
+    const tile = document.createElement("canvas");
+    tile.width = 72; tile.height = 100;
+    const c = tile.getContext("2d"), angle = phase * Math.PI / 4;
+    const light = c.createRadialGradient(36, 77, 2, 36, 77, 36);
+    light.addColorStop(0,"#fff39fe6"); light.addColorStop(.37,"#ff8510ad");
+    light.addColorStop(1,"#ff4d0000");
+    c.fillStyle = light;
+    c.fillRect(0, 0, 72, 100);
+    for (let i = 0; i < 4; i++) {
+      const x = [25,45,35,34][i], width = [12,11,13,8][i];
+      const height = [43,48,62,32][i] + Math.sin(angle + i*2)*8;
+      const tip = x + Math.sin(angle+i*1.7)*9;
+      const fill=c.createLinearGradient(0,81-height,0,84);
+      fill.addColorStop(0,["#ff542700","#ff350500","#ff761c39","#ffe477a0"][i]);
+      fill.addColorStop(.36,i===3?"#fff1a1":"#ff7e18");
+      fill.addColorStop(1,i>=2?"#fffbd5":"#ffcf39");
+      c.fillStyle=fill; c.beginPath(); c.moveTo(x-width,79);
+      c.bezierCurveTo(x-width-3,65,tip+9,68-height*.57,tip,81-height);
+      c.bezierCurveTo(tip+width,74-height*.48,x+width+6,65,x+width,79);
+      c.quadraticCurveTo(x,89,x-width,79); c.fill();
+    }
+    for (let i=0;i<4;i++) {
+      const age=((phase+i*2)%8)/8;
+      c.globalAlpha=1-age;
+      c.fillStyle=i%2?"#fff1a0":"#ff9d40";
+      c.fillRect(20+i*10+Math.sin(angle+i)*4,57-age*47,1.8,3.8);
+    }
+    return tile;
+  });
+}
+
+function makeLightning(width, height) {
+  const tile = document.createElement("canvas");
+  tile.width = Math.ceil(width); tile.height = Math.ceil(height);
+  const c = tile.getContext("2d");
+  c.translate(width*.5,0);
+  const main = [[.045,0],[-.065,.18],[-.023,.17],[-.088,.35],[.012,.32],
+    [-.041,.54],[.066,.51],[-.039,.74],[-.008,.729],[0,.989]];
+  const forks = [
+    [main[3],[-.13,.38],[-.175,.39],[-.21,.46],[-.27,.49]],
+    [main[6],[.18,.42],[.164,.455],[.28,.36]],
+    [main[7],[-.13,.67],[-.18,.69],[-.26,.61]],
+  ];
+  let seed=1619;
+  function stroke(points, weight, fork=false) {
+    const path=new Path2D();
+    path.moveTo(points[0][0]*width,points[0][1]*height);
+    for (let i=1;i<points.length;i++) {
+      const [x,y]=points[i], [px,py]=points[i-1];
+      const steps=Math.max(1,Math.round(Math.hypot((x-px)*width,(y-py)*height)/11));
+      for(let j=1;j<=steps;j++) {
+        seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+        const drift=j===steps?0:((seed/4294967296)-.5)*(fork?3.4:4.8);
+        path.lineTo((px+(x-px)*j/steps)*width+drift,(py+(y-py)*j/steps)*height);
+      }
+    }
+    c.lineJoin=c.lineCap="round";
+    for (const [scale,color] of [[7.5,"#8847ff25"],[3.7,"#955aff68"],[1.9,"#c6a8ffeb"],[1,"#fff9ff"]]) {
+      c.lineWidth=weight*scale; c.strokeStyle=color; c.stroke(path);
+    }
+  }
+  for(const fork of forks) stroke(fork,1,true);
+  stroke(main,2.55);
+  return tile;
+}
+
 export function createRail({
   stage,
   notes,
@@ -81,7 +174,7 @@ export function createRail({
 }) {
   const base = stage.querySelector(".rail-base");
   const canvas = stage.querySelector("#note-layer");
-  const background = base.getContext("2d", { alpha: false });
+  const background = base.getContext("2d");
   const ctx = canvas.getContext("2d");
   const count = keys.length;
   const fractions = Array.from(
@@ -89,6 +182,8 @@ export function createRail({
     (_, i) => (i + 0.5) / count - 0.5,
   );
   const normal = colors.map((c) => makeSprite(c, "normal"));
+  const flames = makeFlames();
+  let lightning;
   const symbols = Object.fromEntries(
     Object.entries(special).map(([k, meta]) => [k, makeSprite(meta.color, k)]),
   );
@@ -117,6 +212,8 @@ export function createRail({
     firstVisible = 0;
   let powerActive = false;
   let powerPercent = 0;
+  let powerFlash = -Infinity;
+  let streakStart = -Infinity;
   let wakeMotion;
   function setPower(active, energy) {
     const percent = Math.min(100, Math.max(0, Math.round(energy) || 0));
@@ -129,6 +226,7 @@ export function createRail({
     powerActive = active;
     powerLight.classList.toggle("active", active);
     if (!active || reduced) return;
+    powerFlash = performance.now();
 
     wakeMotion?.cancel();
     wakeMotion = powerWake.animate(
@@ -171,6 +269,7 @@ export function createRail({
   function resize() {
     if (stopped) return;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
     w = Math.max(1, rect.width);
     h = Math.max(1, rect.height);
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -185,15 +284,19 @@ export function createRail({
     travel = target - top;
     mid = w / 2;
     near = w * 0.84;
-    far = near * 0.56;
+    far = near * 0.44;
     radius = Math.min(13.5, (near / count) * 0.19);
     powerLight.style.top = target + "px";
     powerLight.style.insetInline = (w - near) / 2 + "px";
 
-    background.fillStyle = "#1a1c19";
-    background.fillRect(0, 0, w, h);
-    // Faint trapezoid and diverging strings. The player's eye follows the dots.
-    background.fillStyle = "#20231e";
+    background.clearRect(0, 0, w, h);
+    lightning = makeLightning(near*.75, travel*.94);
+    // Draw the beveled sides and graded road surface once per resize.
+    const road = background.createLinearGradient(0, top, 0, target);
+    road.addColorStop(0, "#14131cee");
+    road.addColorStop(.53, "#23232bf7");
+    road.addColorStop(1, "#302b32");
+    background.fillStyle = road;
     background.beginPath();
     background.moveTo(mid - far / 2, top);
     background.lineTo(mid + far / 2, top);
@@ -201,9 +304,44 @@ export function createRail({
     background.lineTo(mid - near / 2, target);
     background.closePath();
     background.fill();
+    background.save();
+    background.clip();
+    // Stamped chevrons and fine diagonal grooves catch light across the metal.
+    for(let i=1;i<24;i++) {
+      const d=(i/24)**1.45, y=top+travel*d, half=(far+(near-far)*d)/2;
+      const dip=4+13*d;
+      for (const [offset,shade] of [[0,"#00000050"],[1.5,"#eee6ff0e"]]) {
+        background.strokeStyle=shade; background.lineWidth=1+d;
+        background.beginPath();background.moveTo(mid-half,y+offset-dip);
+        background.lineTo(mid,y+offset);background.lineTo(mid+half,y+offset-dip);background.stroke();
+      }
+    }
+    background.strokeStyle="#dad9ff06";background.lineWidth=.6;
+    for(let x=-h;x<w;x+=7){
+      background.beginPath(); background.moveTo(x,top); background.lineTo(x+h,target); background.stroke();
+    }
+    background.restore();
+    for (const side of [-1, 1]) {
+      const start = mid + side * far / 2;
+      const finish = mid + side * near / 2;
+      background.fillStyle = "#080911";
+      background.beginPath();
+      background.moveTo(start, top);
+      background.lineTo(start + side * 3, top + 5);
+      background.lineTo(finish + side * 10, target + 9);
+      background.lineTo(finish, target);
+      background.closePath();
+      background.fill();
+      background.lineWidth = 1.2;
+      background.strokeStyle = "#82808d";
+      background.beginPath();
+      background.moveTo(start, top);
+      background.lineTo(finish, target);
+      background.stroke();
+    }
     const horizon = background.createLinearGradient(0, top, 0, target);
-    horizon.addColorStop(0, "#30342b");
-    horizon.addColorStop(1, "#52594a");
+    horizon.addColorStop(0, "#4a4651");
+    horizon.addColorStop(1, "#787080");
     background.strokeStyle = horizon;
     background.lineWidth = 1;
     for (const fraction of fractions) {
@@ -218,12 +356,17 @@ export function createRail({
     background.font = "600 14px Barlow, sans-serif";
     for (let lane = 0; lane < count; lane++) {
       const x = mid + near * fractions[lane];
-      background.fillStyle = "#1c201b";
+      background.fillStyle = "#141019";
       background.strokeStyle = colors[lane];
       background.lineWidth = 1.75;
       background.beginPath();
-      background.arc(x, target, radius + 2, 0, Math.PI * 2);
+      background.ellipse(x,target,radius+5,radius*.76+2,0,0,Math.PI*2);
       background.fill();
+      background.stroke();
+      background.lineWidth = 1;
+      background.strokeStyle = "#e7f0dc3a";
+      background.beginPath();
+      background.ellipse(x,target-1,radius+1,radius*.62,0,Math.PI*1.08,Math.PI*1.92);
       background.stroke();
       background.fillStyle = "#d8ddcf";
       background.fillText(keys[lane], x, target + 32);
@@ -244,8 +387,7 @@ export function createRail({
   }
   function draw(t, stamp, next, flags, label, message) {
     ctx.clearRect(0, 0, w, h);
-    // Beat ticks stay at the edge so notes remain the strongest visual cue.
-    ctx.fillStyle = "#575d50";
+    // Subtle crossbars give the projected road a readable beat and depth.
     while (beatIndex < beats.length && beats[beatIndex] < t) beatIndex++;
     while (beatIndex > 0 && beats[beatIndex - 1] >= t) beatIndex--;
     for (let i = beatIndex; i < beats.length && beats[i] <= t + lead; i++) {
@@ -254,8 +396,11 @@ export function createRail({
         depth = x * (0.6 + 0.4 * x);
       const y = top + travel * depth,
         half = (far + (near - far) * depth) / 2;
-      ctx.fillRect(mid - half - 3, y, 3, 1);
-      ctx.fillRect(mid + half, y, 3, 1);
+      ctx.fillStyle = i % 4 === 0 ? "#e7dfff53" : "#e7dfff24";
+      ctx.fillRect(mid - half, y, half * 2, i % 4 === 0 ? 2 : 1);
+      ctx.fillStyle = "#8f8799";
+      ctx.fillRect(mid - half, y, 3, 1);
+      ctx.fillRect(mid + half - 3, y, 3, 1);
     }
     for (let i = 0; i < count; i++) {
       if (!activeKeys[i] && stamp >= lightUntil[i]) continue;
@@ -263,11 +408,11 @@ export function createRail({
       ctx.fillStyle = colors[i];
       ctx.globalAlpha = 0.26;
       ctx.beginPath();
-      ctx.arc(x, target, radius + 5, 0, Math.PI * 2);
+      ctx.ellipse(x,target,radius+7,radius*.83+3,0,0,Math.PI*2);
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.arc(x, target, radius - 1, 0, Math.PI * 2);
+      ctx.ellipse(x,target,radius+2,radius*.68,0,0,Math.PI*2);
       ctx.fill();
     }
     if (end < next) end = next;
@@ -283,13 +428,14 @@ export function createRail({
       const n = notes[i],
         held = flags[i] === 3;
       if (flags[i] && !held) continue;
-      const p = held ? 1 : 1 - (n.t - t) / lead;
+      // Keep notes still in the late hit window clear of the key labels.
+      const p = held ? 1 : Math.min(1, 1 - (n.t - t) / lead);
       if (p < 0 || (!held && n.t < t - 0.17)) continue;
       const d = p * (0.6 + 0.4 * p),
         frac = fractions[n.lane],
         x = mid + (far + (near - far) * d) * frac,
         y = top + travel * d;
-      const size = (specialSize[i] ? 38 : 33) * (0.64 + 0.36 * d);
+      const size = (specialSize[i] ? 42 : 39) * (0.64 + 0.36 * d);
       if (n.duration) {
         const tailP = Math.min(
           1,
@@ -319,10 +465,32 @@ export function createRail({
         gpu.sprite(noteTiles[i], x - size * 0.5, y - size * 0.5, size, size);
       else
         ctx.drawImage(noteTiles[i], x - size * 0.5, y - size * 0.5, size, size);
+      if (held && !reduced) {
+        const tile=flames[(Math.floor(stamp/48)+n.lane)%flames.length];
+        ctx.drawImage(tile,x-21,target-49,42,60);
+      }
     }
     if (accelerated) gpu.finish();
+    const boltAge = (stamp - streakStart) / 430;
+    if (boltAge >= 0 && boltAge < 1 && lightning) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1,(1-boltAge)*1.6);
+      ctx.drawImage(lightning,mid-lightning.width/2,target-lightning.height);
+      ctx.globalAlpha=(1-boltAge)*.9;
+      ctx.strokeStyle="#d5a5ff";ctx.lineWidth=3*(1-boltAge)+1;
+      ctx.beginPath();ctx.ellipse(mid,target,12+near*.4*boltAge,3+28*boltAge,0,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+    const flash = (stamp - powerFlash) / 330;
+    if (flash >= 0 && flash < 1) {
+      // The activation spark rises from the strike line and clears the lane.
+      const size = 50 + flash * 18;
+      ctx.globalAlpha = 1 - flash;
+      ctx.drawImage(symbols.critical, mid - size / 2, target - size - flash * 30, size, size);
+      ctx.globalAlpha = 1;
+    }
     for (const burst of impacts) {
-      const age = (stamp - burst.start) / 340;
+      const age = (stamp - burst.start) / (burst.miss ? 220 : 340);
       if (age < 0 || age >= 1) continue;
       const x = mid + near * fractions[burst.lane],
         y = target;
@@ -334,31 +502,21 @@ export function createRail({
       ctx.fillStyle = color;
       ctx.beginPath();
       if (burst.miss) {
-        ctx.moveTo(x - r * 0.7, y - r * 0.7);
-        ctx.lineTo(x + r * 0.7, y + r * 0.7);
-        ctx.moveTo(x + r * 0.7, y - r * 0.7);
-        ctx.lineTo(x - r * 0.7, y + r * 0.7);
+        const cross = r * 0.46;
+        ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+        ctx.moveTo(x - cross, y - cross);
+        ctx.lineTo(x + cross, y + cross);
+        ctx.moveTo(x + cross, y - cross);
+        ctx.lineTo(x - cross, y + cross);
         ctx.stroke();
-        ctx.globalAlpha = (1 - age) * 0.15;
-        ctx.fillRect(
-          x - (near / count) * 0.36,
-          y - 46,
-          (near / count) * 0.72,
-          70,
-        );
       } else {
-        const spread = reduced ? 6 : 32;
-        ctx.arc(x, y, r + spread * age, 0, Math.PI * 2);
+        const spread = reduced ? 4 : 18;
+        ctx.ellipse(x,y,r+spread*age,(r+spread*age)*.62,0,0,Math.PI*2);
         ctx.stroke();
-        if (!reduced)
-          for (let k = 0; k < 8; k++) {
-            const angle = (k * Math.PI) / 4 + 0.18,
-              px = x + Math.cos(angle) * (r + age * 42),
-              py = y + Math.sin(angle) * (r + age * 42);
-            ctx.beginPath();
-            ctx.arc(px, py, 2.5 * (1 - age) + 0.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
+        if (!reduced) {
+          const size=53+14*Math.sin(age*Math.PI);
+          ctx.drawImage(flames[Math.min(7,Math.floor(age*8))],x-size*.5,y-size*1.13,size,size*1.39);
+        }
       }
     }
     ctx.globalAlpha = 1;
@@ -382,6 +540,10 @@ export function createRail({
     illuminate,
     laneAt,
     impact,
+    streak() {
+      streakStart = performance.now();
+    },
+    clearStreak() { streakStart = -Infinity; },
     setPower,
     draw,
     reset() {
@@ -390,6 +552,8 @@ export function createRail({
       activeKeys.fill(0);
       for (const burst of impacts) burst.start = -10000;
       wakeMotion?.cancel();
+      powerFlash = -Infinity;
+      streakStart = -Infinity;
       setPower(false, 0);
     },
     destroy() {

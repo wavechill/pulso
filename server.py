@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -22,10 +23,12 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from audio_formats import FORMATS, MEDIA_TYPES, encode_audio
 from music_folder import MusicFolder, publish_audio, signature
+from performances import CATALOG_REVISION, candidates, identify as identify_recording, reviewed_chart
+from reductions import REVISION as PHRASING_REVISION, refine
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
@@ -111,6 +114,7 @@ def load_library():
 
 MAP_UPDATES = {}
 MAP_GUARD = threading.Lock()
+ROUND_RENDER = threading.Lock()
 
 
 def current_song(song_id):
@@ -118,23 +122,60 @@ def current_song(song_id):
     entry = get_song(song_id)
     info, audio, chart_path = entry
     from analysis_engine import VERSION
-    if info.get("analysisVersion", 0) >= VERSION:
+    def ready(meta):
+        return meta.get("analysisVersion", 0) >= VERSION and meta.get("phrasingRevision", 0) >= PHRASING_REVISION and (
+            meta.get("performanceScan", 0) >= CATALOG_REVISION
+            or not candidates(meta.get("duration", 0)))
+    if ready(info):
         return entry
     with MAP_GUARD:
         lock = MAP_UPDATES.setdefault(song_id, threading.Lock())
     with lock:
         entry = get_song(song_id)
         info, audio, chart_path = entry
-        if info.get("analysisVersion", 0) >= VERSION:
+        if ready(info):
             return entry
         chart = json_read(chart_path)
-        if chart.get("analysisVersion", 0) < VERSION:
-            from analysis_engine import analyze
+        changed = False
+        scan = (info.get("performanceScan", 0) < CATALOG_REVISION and
+                (chart.get("performance", {}).get("id") == "frases" or
+                 chart.get("performance", {}).get("revision", 0) < CATALOG_REVISION) and
+                candidates(info.get("duration") or chart["duration"]))
+        if scan or chart.get("analysisVersion", 0) < VERSION:
             from importer import find_ffmpeg
             os.environ.setdefault("FFMPEG_PATH", find_ffmpeg())
-            chart = analyze(audio)
+        if chart.get("analysisVersion", 0) < VERSION:
+            from analysis_engine import analyze
+            directory = DATA / "encores" / song_id if info["kind"] == "demo" else audio.parent
+            # A batch analysis can finish before the player closes an older
+            # release. Consume its map only for the exact same local asset.
+            prepared = directory / f"mapa-v{VERSION}.json"
+            candidate = None
+            if prepared.is_file():
+                try:
+                    saved = json_read(prepared)
+                    stat = audio.stat()
+                    if (saved["source"] == [song_id,stat.st_size,str(stat.st_mtime_ns)] and
+                        saved["map"]["analysisVersion"] == VERSION):
+                        candidate = saved["map"]
+                except (OSError,KeyError,TypeError,ValueError):
+                    pass
+            chart = candidate or analyze(audio, performance_directory=directory)
+            changed = True
+        elif scan:
+            duration = info.get("duration") or chart["duration"]
+            match = identify_recording(audio, duration)
+            if match:
+                chart = reviewed_chart(match, duration)
+                changed = True
+        if chart.get("phrasingRevision", 0) < PHRASING_REVISION:
+            refine(chart)
+            changed = True
+        if changed:
             json_write(chart_path, chart)
-        refreshed = dict(info, bpm=chart["bpm"], engine=chart["engine"], analysisVersion=chart["analysisVersion"])
+        refreshed = dict(info, bpm=chart["bpm"], engine=chart["engine"],
+                         analysisVersion=chart["analysisVersion"], performanceScan=CATALOG_REVISION,
+                         phrasingRevision=PHRASING_REVISION)
         json_write(chart_path.with_name("info.json"), refreshed)
         with LOCK:
             info.update(refreshed)
@@ -146,6 +187,74 @@ def get_song(song_id):
     if entry is None:
         raise Problem(404, "A música não está na biblioteca.")
     return entry
+
+
+def performance_audio(song_id, faster=False):
+    from importer import _tool, find_ffmpeg
+    from performances import render
+    current_song(song_id)
+    with MAP_GUARD:
+        lock = MAP_UPDATES.setdefault(song_id, threading.Lock())
+    with lock:
+        info, source, chart_path = get_song(song_id)
+        chart = json_read(chart_path)
+        performance = chart.get("performance")
+        if not performance:
+            raise Problem(404, "Esta gravação usa o áudio original na partida.")
+        directory = DATA / "encores" / song_id if info["kind"] == "demo" else source.parent
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / f"instrumento-r{performance['revision']}.flac"
+        os.environ.setdefault("FFMPEG_PATH", find_ffmpeg())
+        with ROUND_RENDER:
+            if not target.is_file() or target.stat().st_mtime_ns < source.stat().st_mtime_ns:
+                notes = chart["charts"]["hard"] if performance["id"] == "frases" else None
+                render(source, target, performance["sections"], notes)
+            if not faster:
+                return target
+            encore = target.with_stem(target.stem + "-115")
+            if encore.is_file() and encore.stat().st_mtime_ns >= max(target.stat().st_mtime_ns,chart_path.stat().st_mtime_ns):
+                return encore
+            with tempfile.TemporaryDirectory(prefix=".encore-", dir=directory) as tmp:
+                draft = Path(tmp) / encore.name
+                # The multichannel master is lossless and has its exact sample count,
+                # even for an AAC import whose old metadata rounded its final packet.
+                length = subprocess.check_output([_tool("ffprobe") or "ffprobe", "-v", "error", "-select_streams", "a:0",
+                    "-show_entries", "stream=duration_ts", "-of", "csv=p=0", str(target)],
+                    creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0), timeout=30)
+                samples = round(int(length.strip()) / 1.15)
+                filters = f"apad=pad_dur=0.1,atempo=1.15,apad,atrim=end_sample={samples}"
+                subprocess.run([find_ffmpeg(), "-nostdin", "-v", "error", "-i", str(target), "-af", filters,
+                                "-c:a", "flac", "-channel_layout", "quad", str(draft)], check=True,
+                               timeout=300, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                os.replace(draft, encore)
+            return encore
+
+
+def encore_audio(song_id):
+    """Render a pitch-preserving 1.15x copy once, only for songs played in round two."""
+    # Serialize FFmpeg jobs and share the song lock with deletion. Imported
+    # songs own their derived file, so deleting the song also deletes the copy.
+    with MAP_GUARD:
+        map_lock = MAP_UPDATES.setdefault(song_id, threading.Lock())
+    with map_lock:
+        info, source, chart = get_song(song_id)
+        directory = DATA / "encores" / song_id if info["kind"] == "demo" else source.parent
+        target = directory / "encore-115.flac"
+        if target.is_file() and target.stat().st_mtime_ns >= source.stat().st_mtime_ns:
+            return target
+        directory.mkdir(parents=True, exist_ok=True)
+        duration = float(json_read(chart)["duration"]) / 1.15
+        # Give the tempo filter enough tail to retain the last transient. Trim
+        # to the same clock used for the accelerated notes, down to one sample.
+        filters = f"aresample=48000,apad=pad_dur=0.1,atempo=1.15,apad,atrim=end={duration:.8f}"
+        with ROUND_RENDER, tempfile.TemporaryDirectory(prefix=".encore-", dir=directory) as tmp:
+            draft = Path(tmp) / target.name
+            try:
+                encode_audio(source, draft, filters=filters)
+                os.replace(draft, target)
+            except (ValueError, OSError, RuntimeError) as error:
+                raise Problem(503, "Não foi possível preparar o áudio da segunda rodada. Tente novamente.") from error
+        return target
 
 
 def set_song_hidden(song_id, hidden):
@@ -286,16 +395,21 @@ def run_import(job, folder, source, original_title, url, copy_to_music=True, can
             # transfer smaller while using the very same samples for mapping.
             audio = asset / ("audio.flac" if url else "audio.m4a")
             encode_audio(source, audio)
-            data = analyze(audio, progress)
-            if any(not data["charts"].get(d) for d in DIFFICULTIES):
-                raise ValueError("O áudio não tem eventos musicais suficientes para gerar as três dificuldades.")
+            data = analyze(audio, progress, performance_directory=asset)
             info = {"id": song_id, "title": title, "artist": artist or ("YouTube" if url else "Arquivo local"),
                     "duration": data["duration"], "analysisVersion": data["analysisVersion"], "bpm": data.get("bpm", 0), "engine": data.get("engine", ""),
-                    "kind": "youtube" if url else "file", "created": now_ms()}
+                    "kind": "youtube" if url else "file", "created": now_ms(), "performanceScan": CATALOG_REVISION,
+                    "phrasingRevision": PHRASING_REVISION}
             if JOBS[job]["videoId"]:
                 info["videoId"] = JOBS[job]["videoId"]
             cover = folder / "cover.jpg"
-            if cover.is_file():
+            if not url and not cover.exists():
+                # Only an embedded cover is eligible. A local video frame is not album art.
+                subprocess.run([find_ffmpeg(), "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe",
+                                "-i", str(source), "-map", "0:v:disp:attached_pic", "-frames:v", "1",
+                                "-vf", "scale=800:800:force_original_aspect_ratio=decrease", "-update", "1",
+                                str(cover)], capture_output=True, creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+            if cover.is_file() and cover.stat().st_size:
                 cover.replace(asset / "cover.jpg")
                 info["cover"] = f"/api/songs/{song_id}/cover"
             json_write(asset / "chart.json", data)
@@ -313,7 +427,7 @@ def run_import(job, folder, source, original_title, url, copy_to_music=True, can
                     updated = dict(info, videoId=JOBS[job]["videoId"])
                     json_write(existing_audio.with_name("info.json"), updated)
                     info.update(updated)
-        message = "Música pronta para jogar"
+        message = "Faixa disponível na biblioteca"
         if copy_to_music:
             try:
                 save_music_copy(song_id, source)
@@ -773,6 +887,8 @@ def room_create(body):
     base_hp = round(240 + chart["duration"] * 5)
     max_hp = round(base_hp * (1 + min(0.18, 0.024 * (LEVEL - 1))))
     easy_notes = chart["charts"]["easy"]
+    if not easy_notes:
+        raise Problem(422, "Nesta faixa não apareceram ataques instrumentais suficientes. Você pode ouvi-la no Player.")
     # Keep enough playable attacks after the phase change, even on recordings
     # with a long outro, for the shield to be beatable.
     shift = min(phase_transition(chart), easy_notes[int(0.65 * len(easy_notes))]["t"])
@@ -1171,7 +1287,8 @@ class Request(BaseHTTPRequestHandler):
 
     def dispatch(self):
         self.guard()
-        path = unquote(urlsplit(self.path).path)
+        url = urlsplit(self.path)
+        path = unquote(url.path)
         parts = path.strip("/").split("/")
         get = self.command in ("GET", "HEAD")
         if not path.startswith("/api/") and get:
@@ -1239,6 +1356,12 @@ class Request(BaseHTTPRequestHandler):
                 result = delete_song(parts[2])
             else:
                 raise Problem(400, "Confirme a exclusão da faixa.")
+        elif get and len(parts) == 4 and parts[1] == "songs" and parts[3] == "performance":
+            tempo = parse_qs(url.query, keep_blank_values=True).get("tempo")
+            if tempo not in (None, ["1.15"]):
+                raise Problem(400, "Velocidade de rodada inválida.")
+            self.serve_file(performance_audio(parts[2], faster=bool(tempo)))
+            return
         elif get and len(parts) == 4 and parts[1] == "songs" and parts[3] in ("audio", "chart", "cover", "download"):
             info, audio, chart = current_song(parts[2]) if parts[3]=="chart" else get_song(parts[2])
             if parts[3] == "download":
@@ -1247,6 +1370,12 @@ class Request(BaseHTTPRequestHandler):
                 self.serve_file(original, name)
                 return
             file = {"audio": audio, "chart": chart, "cover": chart.with_name("cover.jpg")}[parts[3]]
+            if parts[3] == "audio":
+                tempo = parse_qs(url.query, keep_blank_values=True).get("tempo")
+                if tempo is not None:
+                    if tempo != ["1.15"]:
+                        raise Problem(400, "Velocidade de rodada inválida.")
+                    file = encore_audio(parts[2])
             if not file.is_file():
                 raise Problem(404, "Arquivo não encontrado.")
             if parts[3] == "chart":

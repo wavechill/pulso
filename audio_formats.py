@@ -20,12 +20,13 @@ MEDIA_TYPES = {"." + key for key in FORMATS} | {
 }
 
 
-def encode_audio(source, destination):
+def encode_audio(source, destination, *, filters=None):
     options = FORMATS[destination.suffix[1:].lower()]
     command = [
         find_ffmpeg(), "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
         "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:a:0",
-        "-vn", "-sn", "-dn", *options, "-threads", "2", str(destination),
+        "-vn", "-sn", "-dn", *(["-af", filters] if filters else []),
+        *options, "-threads", "2", str(destination),
     ]
     try:
         process = subprocess.run(command, capture_output=True, timeout=300,

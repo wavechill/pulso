@@ -1,0 +1,4 @@
+KUIELab MDX-Net, Track A, accompaniment model (onnx_A/other.onnx).
+Upstream source and pretrained model: https://github.com/kuielab/mdx-net-submission
+SHA-256: 7b67a1dcb5f232153528c59960b4c7bf8dc736b8114de360af0e719633f53358
+The model is distributed with the upstream MIT license in this directory.

@@ -24,7 +24,16 @@ Fácil       A S J
 Médio       A S J K
 Difícil     A S J K L
 
-Acerte o centro da bolinha quando ele chegar ao círculo da mesma pista. Se a bolinha tiver cauda, segure até a ponta chegar ao círculo. Soltar cedo interrompe a sequência. Completar a sustentação dá bônus. O fácil acompanha principalmente o pulso audível; médio e difícil acrescentam subdivisões e detalhes de melodia. O jogo usa o relógio de áudio do navegador para sincronizar a pista.
+Acerte o centro da bolinha quando ele chegar ao círculo da mesma pista. Se a bolinha tiver cauda, segure até a ponta chegar ao círculo. Soltar cedo interrompe a sequência. Completar a sustentação dá bônus.
+“Perfeito!” marca um acerto a até 55 milissegundos do alvo. Uma chama acompanha a tecla acertada. Aos 8, 16, 32 e 64 acertos em sequência, um raio cai no centro do trilho com um estrondo e uma vibração breve. A partir de 100, o jogo comemora a cada 50. Com a redução de movimento do sistema, o aviso de sequência aparece parado.
+Uma palhetada curta e abafada indica os erros. A música segue no volume escolhido. Ajuste o volume da palhetada e do trovão em Configurações → Efeitos da partida. O botão de paisagem durante a partida alterna entre a capa da própria música e um fundo preto. A escolha fica salva. Uma faixa sem capa usa o fundo preto.
+A legenda mostra a parte que você está tocando. O mapa pode acompanhar as sílabas e as notas prolongadas do canto, uma entrada da bateria, o baixo ou um riff. No Treino das faixas importadas, marque “Ouvir só a parte indicada no trilho” para praticar essa parte isolada. Os arranjos revisados de Sunflower, Waves e Training Season (ao vivo no Royal Albert Hall) continuam disponíveis.
+No solo, “Usar um mapa .chart” abre um arquivo de guitarra com cinco teclas. Escolha a gravação usada pelo autor e uma dificuldade do arquivo. A seleção fica disponível enquanto o Pulso estiver aberto. Para voltar, selecione “Mapa automático do Pulso”.
+Em Chop Suey!, “Jogar o original no Guitar Flash 3” abre a partida do site, com as dificuldades e as teclas dele. É preciso ter internet. Use “Voltar ao Pulso” para comparar. No Treino do Pulso, marque “Repetir o riff de 0:32 a 0:48”. O áudio volta pouco antes do riff a cada passagem. Arrastar a barra de progresso encerra a repetição.
+O Pulso compara as frases que se repetem na música e procura as respostas entre as partes. Na primeira partida de uma faixa antiga, prepara e salva a versão atualizada no PC. Músicas novas já recebem o mapa durante a importação.
+No solo, clique ou arraste a barra de progresso para escolher outra posição. O jogo pausa no ponto escolhido, reinicia os pontos e conta a tentativa como um trecho. Clique em Continuar para tocar dali.
+Ao terminar a música no solo, você entra em um intervalo. Pode finalizar com o resultado da primeira rodada ou tocar a mesma faixa 15% mais rápido. A segunda rodada preserva a afinação da voz e dos instrumentos. A contagem dá tempo de voltar ao teclado, e o resultado final soma as duas rodadas.
+No Fácil você toca os acentos principais. O Médio e o Difícil preservam os ataques do Fácil e acrescentam detalhes. No Difícil, duas bolinhas na mesma altura formam um acorde. Aperte as duas teclas juntas.
 Acertos explodem na pista. Uma nota perdida marca o alvo em vermelho e tira vida. No solo, três acertos seguidos recuperam até 6 pontos de vida. O botão de tela cheia ao lado de Sair alterna tela cheia. Use P ou o botão de pausa para pausar o solo. Nas configurações é possível ajustar volume e teclas. Se P for usado em uma pista personalizada, use o botão para pausar.
 A contagem de três segundos termina antes de as notas aparecerem. A linha roxa dos círculos mostra sua energia e enche com os acertos. A partir de 20%, mantenha Espaço pressionado para dobrar os pontos no solo ou o dano no cooperativo. O brilho percorre a linha e se dissipa abaixo. A energia diminui durante o uso. Solte para guardar o restante.
 
@@ -34,11 +43,18 @@ Acertos causam dano e erros tiram vida. O painel mostra a vida, pontuação e ef
 
 Se o convite não abrir, confira se ambos estão na mesma rede e se o anfitrião está com o Pulso aberto. Para receber conexões, o Windows precisa permitir o tráfego da rede privada na porta 8765. O app ativa a escuta de rede ao criar a primeira sala e usa somente as permissões já concedidas à sua conta.
 
+Gravar com OBS Studio
+No OBS, adicione uma fonte “Captura de janela” e escolha “[Pulso.exe] Pulso”. Em “Método de captura”, selecione “Windows 10 (1903 ou superior)”. Esse método captura a imagem da janela do jogo.
+Para gravar a música e os efeitos, use “Áudio do desktop” no mixer do OBS e selecione a saída de som usada pelo Pulso. A fonte grava todos os sons dessa saída. No seu mix, mantenha só uma fonte para a mesma saída.
+O passo a passo também aparece em Configurações → Gravar com OBS Studio.
+
 Requisitos
-O pacote portátil é para Windows 10 ou 11 x64 com Microsoft Edge WebView2 Runtime. O pacote contém Python, FFmpeg, yt-dlp, Deno e o modelo de análise. O navegador via Iniciar Pulso.cmd usa um Python de 64 bits instalado e as ferramentas no PATH ou no runtime do Frame Scale.
+O pacote portátil é para Windows 10 ou 11 x64 com Microsoft Edge WebView2 Runtime. O pacote contém Python, FFmpeg, yt-dlp, Deno e os modelos de análise. O navegador via Iniciar Pulso.cmd usa um Python de 64 bits instalado e as ferramentas no PATH ou no runtime do Frame Scale.
 
 Tecnologia e créditos
 Basic Pitch, do Spotify, estima os ataques e alturas de notas. O Pulso combina essas estimativas com a percussão para gerar mapas com 3, 4 e 5 pistas. Os padrões são aproximações jogáveis e variam conforme o arranjo e a qualidade da gravação.
-Modelo Basic Pitch e avisos incluídos em models/basic-pitch (Apache 2.0).
+O Basic Pitch transcreve os instrumentos melódicos e o baixo. O modelo e a licença Apache 2.0 acompanham o jogo em models/basic-pitch.
+O Open-Unmix UMX-HQ separa acompanhamento, baixo, bateria e voz para a análise instrumental. Os quatro modelos, os créditos e a licença MIT ficam em models/umxhq.
+O MDX-Net do KUIELab faz uma segunda estimativa de guitarras, teclados e cordas. O Pulso usa os ataques audíveis desses instrumentos para posicionar as notas e o som entre os ataques para reconhecer acordes e repetições. O modelo e a licença MIT ficam em models/mdx.
 Fonte Barlow distribuída sob SIL Open Font License, em web/fonts/OFL.txt.
 Órbita, Vidro Azul e Maré Baixa são composições instrumentais originais preparadas para o jogo.

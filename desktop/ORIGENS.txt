@@ -20,3 +20,4 @@ WebView2 SDK 1.0.4258.31. A janela usa o runtime Evergreen do computador.
 https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
 
 Modelo Basic Pitch do Spotify e fonte Barlow. Licenças em app/models/basic-pitch e app/web/fonts.
+Separação instrumental com os quatro modelos Open-Unmix UMX-HQ. Pesos originais publicados pelos autores em https://zenodo.org/records/3370489. A licença e as assinaturas dos modelos distribuídos estão em app/models/umxhq.

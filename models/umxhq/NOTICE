@@ -1,0 +1,19 @@
+Open-Unmix UMX-HQ by Fabian-Robert Stöter, Stefan Uhlich, Antoine Liutkus
+and Yuki Mitsufuji. The original weights and implementation are MIT licensed.
+https://zenodo.org/records/3370489
+https://github.com/sigsep/open-unmix-pytorch/tree/fb672c9584997c2b05e148eeaa65b4c23ed4693b
+https://doi.org/10.21105/joss.01667
+
+Pulso uses the accompaniment, bass, vocal and drum estimators, converted to ONNX and
+quantized to int8. They retain input frequencies up to 16 kHz and output the
+first 1116 frequency bins (approximately 12 kHz), sufficient for charting.
+The application reconstructs separated instrumental audio in memory for transcription.
+
+Original vocals-b62c91ce.pth SHA256 b62c91cedbc7a066f1778ead5b5cecb377aa3a46a31af1cce7c5c8769339d083
+Original drums-9619578f.pth SHA256 9619578f885c54737cb0234f9f9a4a679ee4f31438fd77fd1dbe02bb16c2da0a
+vocals.int8.onnx SHA256 655a4d8d4c5bc427d9fc6e399096cdbaf095144900b1f0c460d06ae78144aecf
+drums.int8.onnx SHA256 45bcaa0052e597707b923466f2080f7a374e95da5952f665cbcd7f412ee376d5
+Original other-b52fbbf7.pth SHA256 b52fbbf76479e752bd72e02304c602ac7802aa5bfbfb9cd12054b2695d5093ab
+Original bass-8d85a5bd.pth SHA256 8d85a5bd3f996a8867fca0e8442e077e5a3f5ec747a6112742452a8f347b39c8
+other.int8.onnx SHA256 3ee5b94fa44a65bb0fe03144fd5f627eff334203ca8fd533051c5f19af19d28f
+bass.int8.onnx SHA256 55bed74645fb1347ef8ce3435825fe5cc5cbf777b8ba043877a4b74972461797

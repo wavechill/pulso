@@ -873,6 +873,53 @@ progress {
   color: var(--muted);
   line-height: 1.2;
 }
+.practice-options {
+  margin: 8px 0 13px;
+}
+.practice-options label {
+  display: block;
+  margin: 6px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+.practice-options input {
+  accent-color: var(--accent);
+}
+.map-file {
+  border-block: 1px solid var(--line);
+  padding: 10px 0;
+  font-size: 14px;
+}
+.map-file summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.map-file label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.map-file label[hidden], .practice-options label[hidden] { display: none; }
+.chart-file-label input { max-width: 100%; }
+.chart-file-label input::file-selector-button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #2a2b27;
+  color: var(--ink);
+  padding: 7px 10px;
+  margin-right: 8px;
+  cursor: pointer;
+}
+#chart-credit { color: var(--muted); overflow-wrap: anywhere; }
+.reference-game {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 0;
+  font-weight: 600;
+  text-decoration: none;
+}
+.reference-game:hover { text-decoration: underline; }
 .member strong small {
   color: var(--muted);
   font-weight: 500;
@@ -1437,3 +1484,13 @@ progress {
     flex: 1;
   }
 }
+.obs-help {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .9em;
+}
+.obs-help summary { cursor: pointer; }
+.obs-help ol { margin-bottom: 0; padding-inline-start: 22px; }
+.obs-help li + li { margin-top: 6px; }

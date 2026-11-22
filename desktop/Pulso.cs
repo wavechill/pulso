@@ -19,13 +19,13 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Pulso")]
 [assembly: AssemblyProduct("Pulso")]
 [assembly: AssemblyDescription("Jogo de ritmo para Windows")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.11.0.0")]
+[assembly: AssemblyFileVersion("1.11.0.0")]
 
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         string data = Environment.GetEnvironmentVariable("PULSO_DATA_DIR");
         if (String.IsNullOrWhiteSpace(data))
@@ -55,7 +55,9 @@ internal static class Program
                     port = 8765;
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new PulsoWindow(data, port, focus));
+                string practiceSong = args.Length == 2 && args[0] == "--treinar" &&
+                    Regex.IsMatch(args[1], @"\A[a-zA-Z0-9_-]{1,96}\z") ? args[1] : null;
+                Application.Run(new PulsoWindow(data, port, focus, practiceSong));
             }
         }
     }
@@ -64,6 +66,7 @@ internal static class Program
 internal sealed class PulsoWindow : WindowFrame
 {
     private readonly Uri home;
+    private readonly Uri firstPage;
     private readonly string data;
     private readonly Label startup;
     private readonly WebView2 view = new WebView2();
@@ -73,11 +76,13 @@ internal sealed class PulsoWindow : WindowFrame
     private Process server;
     private SafeFileHandle lifetime;
     private Uri peer;
+    private GuitarFlashWindow reference;
 
-    internal PulsoWindow(string dataDirectory, int port, EventWaitHandle focus)
+    internal PulsoWindow(string dataDirectory, int port, EventWaitHandle focus, string practiceSong)
     {
         data = dataDirectory;
         home = new Uri("http://127.0.0.1:" + port + "/");
+        firstPage = practiceSong == null ? home : new Uri(home, "?treinar=" + Uri.EscapeDataString(practiceSong));
         Text = "Pulso";
         Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         StartPosition = FormStartPosition.CenterScreen;
@@ -235,7 +240,7 @@ internal sealed class PulsoWindow : WindowFrame
             view.Visible = true;
             startup.Visible = false;
             FloatWindowButtons();
-            core.Navigate(home.AbsoluteUri);
+            core.Navigate(firstPage.AbsoluteUri);
         }
         catch (Exception error)
         {
@@ -273,6 +278,17 @@ internal sealed class PulsoWindow : WindowFrame
         try { message = args.TryGetWebMessageAsString(); }
         catch (ArgumentException) { return; }
         bool allowed = SameOrigin(origin, home) || SameOrigin(origin, peer);
+        if (allowed && message == "guitar-flash:chop-suey")
+        {
+            if (reference == null || reference.IsDisposed)
+            {
+                reference = new GuitarFlashWindow(view.CoreWebView2.Environment, Icon);
+                reference.Show(this);
+            }
+            if (reference.WindowState == FormWindowState.Minimized) reference.WindowState = FormWindowState.Normal;
+            reference.Activate();
+            return;
+        }
         if (allowed && (message == "fullscreen" || message == "exit-fullscreen"))
         {
             ToggleFullScreen(message == "fullscreen" && !FullScreen);
@@ -310,6 +326,82 @@ internal sealed class PulsoWindow : WindowFrame
             server.Dispose();
         }
         base.OnFormClosed(e);
+    }
+}
+
+// The official game is a top-level document in its own WebView. Only the
+// local Pulso view above receives desktop commands.
+internal sealed class GuitarFlashWindow : WindowFrame
+{
+    private const string SongUrl = "https://guitarflash3.com/setlist/system-of-a-down/chop-suey/?lg=pt";
+    private readonly WebView2 site = new WebView2();
+    private readonly Label status = new Label();
+    private readonly FlowLayoutPanel toolbar = new FlowLayoutPanel();
+
+    internal GuitarFlashWindow(CoreWebView2Environment environment, Icon icon)
+    {
+        Text = "Chop Suey! · Guitar Flash 3";
+        Icon = icon;
+        BackColor = Color.FromArgb(21, 22, 21);
+        ForeColor = Color.WhiteSmoke;
+        Font = new Font("Segoe UI", 10f);
+        StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new Size(1180, 830);
+        MinimumSize = new Size(580, 460);
+        toolbar.Dock = DockStyle.Top;
+        toolbar.Height = 68;
+        toolbar.Padding = new Padding(10, 13, 0, 0);
+        toolbar.WrapContents = false;
+        Button back = ToolbarButton("← Voltar ao Pulso");
+        back.Click += (s, e) => Close();
+        Button browser = ToolbarButton("Abrir no navegador ↗");
+        browser.Click += (s, e) => {
+            try { Process.Start(new ProcessStartInfo(SongUrl) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { status.Text = "O Windows não encontrou o navegador padrão."; }
+        };
+        toolbar.Controls.AddRange(new Control[] { back, browser });
+        status.Dock = DockStyle.Fill;
+        status.TextAlign = ContentAlignment.MiddleCenter;
+        status.Text = "Abrindo Chop Suey! no Guitar Flash 3…";
+        site.Dock = DockStyle.Fill;
+        site.DefaultBackgroundColor = BackColor;
+        site.Visible = false;
+        Controls.Add(site);
+        Controls.Add(status);
+        Controls.Add(toolbar);
+        FloatWindowButtons();
+        Shown += async (s, e) => {
+            try {
+                await site.EnsureCoreWebView2Async(environment);
+                if (IsDisposed) return;
+                var core = site.CoreWebView2;
+                core.Settings.IsWebMessageEnabled = false;
+                core.Settings.AreHostObjectsAllowed = false;
+                core.NewWindowRequested += (sender, args) => { args.Handled = true; };
+                core.NavigationCompleted += (sender, args) => {
+                    if (IsDisposed || args.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+                    site.Visible = args.IsSuccess;
+                    status.Visible = !args.IsSuccess;
+                    if (args.IsSuccess) site.Focus();
+                    else status.Text = "Não foi possível abrir o Guitar Flash. Confira a conexão ou use Abrir no navegador.";
+                };
+                core.ContainsFullScreenElementChanged += (sender, args) => {
+                    toolbar.Visible = !core.ContainsFullScreenElement;
+                    ToggleFullScreen(core.ContainsFullScreenElement);
+                };
+                core.Navigate(SongUrl);
+            } catch (Exception) {
+                if (!IsDisposed) status.Text = "Use Abrir no navegador para jogar no site oficial.";
+            }
+        };
+    }
+
+    private Button ToolbarButton(string text)
+    {
+        var button = new Button { Text = text, AutoSize = true, FlatStyle = FlatStyle.Flat,
+            ForeColor = ForeColor, BackColor = BackColor, Padding = new Padding(5), Cursor = Cursors.Hand };
+        button.FlatAppearance.BorderSize = 0;
+        return button;
     }
 }
 
